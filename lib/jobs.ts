@@ -1,5 +1,7 @@
 import { createDemoSheet, findDemoSong } from "@/lib/demo-data";
-import type { Difficulty, JobStatus } from "@/lib/types";
+import type { Difficulty, JobStatus, Song } from "@/lib/types";
+
+const registeredSongs = new Map<string, Song>();
 const stages: Array<{ name: JobStatus["stage"]; start: number; end: number; message: string }> = [
   { name: "queued", start: 0, end: 8, message: "Your practice sheet is in line." },
   { name: "preparing", start: 8, end: 18, message: "Preparing the arrangement request." },
@@ -9,17 +11,39 @@ const stages: Array<{ name: JobStatus["stage"]; start: number; end: number; mess
   { name: "caching", start: 88, end: 100, message: "Putting the finished sheet on your desk." },
 ];
 
-export function createJob(songId: string, difficulty: Difficulty) {
-  const song = findDemoSong(songId);
-  if (!song) return null;
+export function isProcessableSong(value: unknown): value is Song {
+  if (!value || typeof value !== "object") return false;
+  const song = value as Partial<Song> & { source?: Partial<Song["source"]> };
+  return (
+    typeof song.id === "string" &&
+    typeof song.title === "string" &&
+    typeof song.artist === "string" &&
+    typeof song.durationSeconds === "number" &&
+    typeof song.genre === "string" &&
+    typeof song.processingEstimateSeconds === "number" &&
+    !!song.source &&
+    (song.source.provider === "demo" || song.source.provider === "jamendo") &&
+    typeof song.source.trackId === "string" &&
+    typeof song.source.downloadAllowed === "boolean" &&
+    typeof song.source.license?.name === "string" &&
+    typeof song.source.license?.attributionRequired === "boolean" &&
+    (song.source.provider === "demo" || (song.source.downloadAllowed && typeof song.source.downloadUrl === "string"))
+  );
+}
 
-  return `${songId}--${difficulty}--${Date.now().toString(36)}`;
+export function createJob(songId: string, difficulty: Difficulty, suppliedSong?: unknown) {
+  const candidate = isProcessableSong(suppliedSong) && suppliedSong.id === songId ? suppliedSong : findDemoSong(songId);
+  if (!candidate || (candidate.source.provider !== "demo" && !candidate.source.downloadAllowed)) return null;
+
+  const jobId = `${songId}--${difficulty}--${Date.now().toString(36)}`;
+  registeredSongs.set(jobId, candidate);
+  return jobId;
 }
 
 export function getJob(jobId: string): JobStatus | null {
   const [songId, difficulty, createdAtToken] = jobId.split("--");
   const createdAt = Number.parseInt(createdAtToken ?? "", 36);
-  const song = findDemoSong(songId ?? "");
+  const song = registeredSongs.get(jobId) ?? findDemoSong(songId ?? "");
   if (!song || !Number.isFinite(createdAt) || !["beginner", "medium", "hard"].includes(difficulty ?? "")) return null;
   const typedDifficulty = difficulty as Difficulty;
   if (!song) return null;
@@ -37,7 +61,7 @@ export function getJob(jobId: string): JobStatus | null {
 export function getSheet(sheetId: string) {
   const jobId = sheetId.startsWith("sheet-") ? sheetId.slice(6) : "";
   const [songId, difficulty] = jobId.split("--");
-  const song = findDemoSong(songId ?? "");
+  const song = registeredSongs.get(jobId) ?? findDemoSong(songId ?? "");
   if (!song || !["beginner", "medium", "hard"].includes(difficulty ?? "")) return null;
   return createDemoSheet(song, difficulty as Difficulty, sheetId);
 }
