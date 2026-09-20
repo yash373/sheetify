@@ -34,6 +34,11 @@ const difficultyLabels: Record<Difficulty, string> = {
   hard: "Hard",
 };
 const loopLength = 6;
+const instrumentPresets = [
+  { value: "concert-grand", label: "Concert Grand Piano" },
+  { value: "soft-piano", label: "Soft Piano" },
+] as const;
+type InstrumentPreset = (typeof instrumentPresets)[number]["value"];
 
 export function PracticePage({ sheetId }: { sheetId: string }) {
   const [sheet, setSheet] = useState<SheetPackage | null>(null);
@@ -46,6 +51,7 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
   const [loopEnd, setLoopEnd] = useState(loopLength);
   const [countIn, setCountIn] = useState(false);
   const [metronome, setMetronome] = useState(false);
+  const [instrument, setInstrument] = useState<InstrumentPreset>("concert-grand");
   const animation = useRef<number | undefined>(undefined);
   const lastNote = useRef(-1);
   const lastFrame = useRef<number | undefined>(undefined);
@@ -54,6 +60,7 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
   const playingRef = useRef(playing);
   const sheetRef = useRef<SheetPackage | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
+  const instrumentRef = useRef<InstrumentPreset>(instrument);
   const countInRemaining = useRef(0);
   const countInProgress = useRef(0);
   const lastMetronomeBeat = useRef(-1);
@@ -70,6 +77,9 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
   useEffect(() => {
     sheetRef.current = sheet;
   }, [sheet]);
+  useEffect(() => {
+    instrumentRef.current = instrument;
+  }, [instrument]);
 
   useEffect(() => {
     let active = true;
@@ -102,7 +112,7 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
     [sheet],
   );
 
-  function playNote(note: NoteEvent) {
+  function getAudioContext() {
     if (typeof window === "undefined") return;
     const Context =
       window.AudioContext ||
@@ -111,30 +121,51 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
     if (!Context) return;
     const context = audioContext.current ?? new Context();
     audioContext.current = context;
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.value = 440 * 2 ** ((note.midi - 69) / 12);
-    gain.gain.setValueAtTime(0.0001, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.015);
-    gain.gain.exponentialRampToValueAtTime(
-      0.0001,
-      context.currentTime + Math.min(0.45, note.duration),
+    void context.resume();
+    return context;
+  }
+
+  function playNote(note: NoteEvent) {
+    const context = getAudioContext();
+    if (!context) return;
+    const frequency = 440 * 2 ** ((note.midi - 69) / 12);
+    const durationSeconds = Math.max(
+      0.12,
+      (note.duration * 60) / tempoRef.current,
     );
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + Math.min(0.5, note.duration + 0.05));
+    const now = context.currentTime;
+    const attack = instrumentRef.current === "soft-piano" ? 0.025 : 0.008;
+    const release = instrumentRef.current === "soft-piano" ? 0.38 : 0.65;
+    const peak = instrumentRef.current === "soft-piano" ? 0.11 : 0.15;
+    const partials = [
+      { ratio: 1, level: 1 },
+      { ratio: 2, level: 0.32 },
+      { ratio: 3, level: 0.14 },
+      { ratio: 4.07, level: 0.06 },
+    ];
+    for (const partial of partials) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = partial.ratio === 1 ? "triangle" : "sine";
+      oscillator.frequency.value = frequency * partial.ratio;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(
+        Math.max(0.0001, peak * partial.level),
+        now + attack,
+      );
+      gain.gain.exponentialRampToValueAtTime(
+        0.0001,
+        now + attack + durationSeconds + release,
+      );
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + attack + durationSeconds + release + 0.03);
+    }
   }
 
   function playClick(accent = false) {
-    if (typeof window === "undefined") return;
-    const Context =
-      window.AudioContext ||
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!Context) return;
-    const context = audioContext.current ?? new Context();
-    audioContext.current = context;
+    const context = getAudioContext();
+    if (!context) return;
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     oscillator.frequency.value = accent ? 880 : 660;
@@ -339,6 +370,18 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
               Note {currentNoteIndex + 1}/{sheet.noteEvents.length}
             </span>
             <Volume2 className="size-4" />
+            <label className="sr-only" htmlFor="instrument-select">Instrument</label>
+            <select
+              id="instrument-select"
+              aria-label="Instrument"
+              value={instrument}
+              onChange={(event) => setInstrument(event.target.value as InstrumentPreset)}
+              className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"
+            >
+              {instrumentPresets.map((preset) => (
+                <option key={preset.value} value={preset.value}>{preset.label}</option>
+              ))}
+            </select>
           </div>
         </div>
         <div className="overflow-hidden rounded-md border border-border bg-card text-foreground shadow-[0_24px_70px_oklch(0.3_0.04_265_/_0.12)]">
@@ -365,7 +408,10 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
             <Button
               size="icon-lg"
               aria-label={playing ? "Pause" : "Play"}
-              onClick={() => setPlaying((current) => !current)}
+              onClick={() => {
+                if (!playing) getAudioContext();
+                setPlaying((current) => !current);
+              }}
             >
               {playing ? (
                 <Pause className="size-5" />
