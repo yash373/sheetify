@@ -48,6 +48,7 @@ export function writeCache(entry: Omit<CacheEntry, "schemaVersion">) {
 
   try {
     window.localStorage.setItem(cacheKey(entry.song.id, entry.difficulty), serialized);
+    window.dispatchEvent(new Event("sheetify-cache-change"));
     return true;
   } catch {
     return false;
@@ -74,4 +75,5 @@ export function readAllCachedSheets() {
 
 export function removeCache(songId: string, difficulty: Difficulty) {
   window.localStorage.removeItem(cacheKey(songId, difficulty));
+  window.dispatchEvent(new Event("sheetify-cache-change"));
 }

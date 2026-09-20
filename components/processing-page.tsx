@@ -36,7 +36,6 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
           });
         }
         try { currentJobId = await createdJob.current; } catch (nextError) { setError(nextError instanceof Error ? nextError.message : "This demo song could not be prepared."); return; }
-        window.history.replaceState(null, "", `/processing/${currentJobId}`);
       }
 
       async function poll() {
