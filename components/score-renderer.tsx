@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { fallbackPointerPercent } from "@/lib/practice-playback";
 
 type ScoreRendererProps = { musicXml: string; currentMeasure: number; currentNoteIndex: number; totalNotes: number };
 
@@ -13,6 +14,7 @@ export function ScoreRenderer({ musicXml, currentMeasure, currentNoteIndex, tota
   const displayRef = useRef<import("opensheetmusicdisplay").OpenSheetMusicDisplay | null>(null);
   const [zoom, setZoom] = useState(1);
   const [error, setError] = useState("");
+  const [noteheadPositions, setNoteheadPositions] = useState<Array<{ x: number; y: number }>>([]);
 
   useEffect(() => {
     let active = true;
@@ -36,6 +38,7 @@ export function ScoreRenderer({ musicXml, currentMeasure, currentNoteIndex, tota
         setError("");
         display.render();
         displayRef.current = display;
+        window.requestAnimationFrame(measureNoteheads);
       } catch {
         if (active) setError("This score could not be engraved. The practice controls are still available.");
       }
@@ -44,11 +47,27 @@ export function ScoreRenderer({ musicXml, currentMeasure, currentNoteIndex, tota
     return () => { active = false; displayRef.current = null; };
   }, [musicXml, zoom]);
 
+  function measureNoteheads() {
+    const surface = containerRef.current;
+    if (!surface) return;
+    const surfaceBox = surface.getBoundingClientRect();
+    const heads = Array.from(surface.querySelectorAll<SVGGraphicsElement>(
+      '[class*="vf-notehead"], [class*="notehead"], [id*="NoteHead"], [id*="notehead"]',
+    ));
+    const positions = heads
+      .map((head) => head.getBoundingClientRect())
+      .filter((box) => box.width > 0 && box.height > 0)
+      .map((box) => ({ x: box.left - surfaceBox.left + box.width / 2, y: box.top - surfaceBox.top + box.height / 2 }))
+      .filter((position, index, all) => index === 0 || Math.abs(position.x - all[index - 1].x) > 0.5 || Math.abs(position.y - all[index - 1].y) > 0.5);
+    setNoteheadPositions(positions);
+  }
+
   function adjustZoom(nextZoom: number) {
     setZoom(Math.max(0.65, Math.min(1.35, Number(nextZoom.toFixed(2)))));
   }
 
-  const pointerPosition = totalNotes <= 1 ? 0 : (currentNoteIndex / (totalNotes - 1)) * 100;
+  const fallbackPosition = fallbackPointerPercent(currentNoteIndex, totalNotes);
+  const notehead = noteheadPositions[currentNoteIndex];
 
   return <div className="score-renderer" aria-label={`Engraved score, current note ${currentNoteIndex + 1} of ${totalNotes}`}>
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-5 py-3 text-xs text-muted-foreground">
@@ -61,16 +80,17 @@ export function ScoreRenderer({ musicXml, currentMeasure, currentNoteIndex, tota
         <span className="w-10 text-right tabular-nums">{Math.round(zoom * 100)}%</span>
       </div>
     </div>
-    <div className="relative mx-5 mt-5 h-8 rounded-full bg-muted/60" aria-hidden="true">
-      <div className="absolute inset-x-2 top-1/2 h-px bg-border" />
-      <div className="absolute inset-x-2 top-1/2 flex justify-between">
-        {Array.from({ length: Math.max(totalNotes, 2) }, (_, index) => <span key={index} className="-mt-1 block size-2 -translate-y-1/2 rounded-full bg-border" />)}
-      </div>
-      <div className="absolute top-0 h-8 w-0.5 -translate-x-1/2 bg-primary shadow-[0_0_12px_var(--primary)] transition-[left] duration-150 motion-reduce:transition-none" style={{ left: `calc(${pointerPosition}% + 8px - ${pointerPosition * 0.16}px)` }}>
-        <span className="absolute -top-1 left-1/2 -translate-x-1/2 border-x-4 border-b-4 border-x-transparent border-b-primary" />
+    <div className="relative" aria-hidden="true">
+      <div ref={containerRef} className="min-h-64 overflow-x-auto px-3 py-8 sm:px-8" />
+      <div
+        data-testid="score-pointer"
+        className="pointer-events-none absolute -translate-x-1/2 transition-[left,top] duration-150 motion-reduce:transition-none"
+        style={{ left: notehead === undefined ? `${fallbackPosition}%` : `${notehead.x}px`, top: notehead === undefined ? "0.75rem" : `${notehead.y}px` }}
+      >
+        <span className="block size-6 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/15 shadow-[0_0_0_5px_oklch(0.43_0.16_259_/_0.12),0_0_18px_oklch(0.43_0.16_259_/_0.35)]" />
       </div>
     </div>
     <p className="sr-only" aria-live="polite">Current note {currentNoteIndex + 1} of {totalNotes}, measure {currentMeasure}.</p>
-    {error ? <p className="p-8 text-center text-sm text-muted-foreground" role="status">{error}</p> : <div ref={containerRef} className="min-h-64 overflow-x-auto px-3 py-8 sm:px-8" />}
+    {error ? <p className="p-8 text-center text-sm text-muted-foreground" role="status">{error}</p> : null}
   </div>;
 }
