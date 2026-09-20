@@ -16,6 +16,21 @@ export function ScoreRenderer({ musicXml, currentMeasure, currentNoteIndex, tota
   const [error, setError] = useState("");
   const [noteheadPositions, setNoteheadPositions] = useState<Array<{ x: number; y: number }>>([]);
 
+  const measureNoteheads = () => {
+    const surface = containerRef.current;
+    if (!surface) return;
+    const surfaceBox = surface.getBoundingClientRect();
+    const heads = Array.from(surface.querySelectorAll<SVGGraphicsElement>(
+      '[class*="vf-notehead"], [class*="notehead"], [id*="NoteHead"], [id*="notehead"]',
+    ));
+    const positions = heads
+      .map((head) => head.getBoundingClientRect())
+      .filter((box) => box.width > 0 && box.height > 0)
+      .map((box) => ({ x: box.left - surfaceBox.left + box.width / 2, y: box.top - surfaceBox.top + box.height / 2 }))
+      .filter((position, index, all) => index === 0 || Math.abs(position.x - all[index - 1].x) > 0.5 || Math.abs(position.y - all[index - 1].y) > 0.5);
+    setNoteheadPositions(positions);
+  };
+
   useEffect(() => {
     let active = true;
     async function renderScore() {
@@ -46,21 +61,6 @@ export function ScoreRenderer({ musicXml, currentMeasure, currentNoteIndex, tota
     void renderScore();
     return () => { active = false; displayRef.current = null; };
   }, [musicXml, zoom]);
-
-  function measureNoteheads() {
-    const surface = containerRef.current;
-    if (!surface) return;
-    const surfaceBox = surface.getBoundingClientRect();
-    const heads = Array.from(surface.querySelectorAll<SVGGraphicsElement>(
-      '[class*="vf-notehead"], [class*="notehead"], [id*="NoteHead"], [id*="notehead"]',
-    ));
-    const positions = heads
-      .map((head) => head.getBoundingClientRect())
-      .filter((box) => box.width > 0 && box.height > 0)
-      .map((box) => ({ x: box.left - surfaceBox.left + box.width / 2, y: box.top - surfaceBox.top + box.height / 2 }))
-      .filter((position, index, all) => index === 0 || Math.abs(position.x - all[index - 1].x) > 0.5 || Math.abs(position.y - all[index - 1].y) > 0.5);
-    setNoteheadPositions(positions);
-  }
 
   function adjustZoom(nextZoom: number) {
     setZoom(Math.max(0.65, Math.min(1.35, Number(nextZoom.toFixed(2)))));
