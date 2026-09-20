@@ -2,6 +2,7 @@ export type AudioArtifact = {
   bytes: Uint8Array;
   contentType: string;
   filename: string;
+  cleanup?: () => Promise<void> | void;
 };
 
 export type TranscriptionNote = {
