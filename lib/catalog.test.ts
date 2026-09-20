@@ -45,6 +45,11 @@ describe("catalog licensing boundary", () => {
     expect(mapJamendoTrack({ id: "104", name: "Ambiguous", artist_name: "Composer", duration: 90, audiodownload_allowed: true }).source.downloadAllowed).toBe(false);
   });
 
+  it("excludes non-commercial and no-derivatives licenses from processing", () => {
+    expect(mapJamendoTrack({ id: "105", name: "Non-commercial", artist_name: "Composer", duration: 90, license_ccurl: "https://creativecommons.org/licenses/by-nc/4.0/", audiodownload_allowed: true, audiodownload: "https://audio.example/105.mp3" }).source.downloadAllowed).toBe(false);
+    expect(mapJamendoTrack({ id: "106", name: "No derivatives", artist_name: "Composer", duration: 90, license_ccurl: "https://creativecommons.org/licenses/by-nd/4.0/", audiodownload_allowed: true, audiodownload: "https://audio.example/106.mp3" }).source.downloadAllowed).toBe(false);
+  });
+
   it("keeps deterministic demo search filtering when no catalog credential is configured", async () => {
     vi.stubEnv("JAMENDO_CLIENT_ID", "");
     const result = await searchCatalogSongs("Moonlit");
