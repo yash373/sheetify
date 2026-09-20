@@ -12,9 +12,12 @@ const licensedSong: Song = {
   source: {
     provider: "jamendo",
     trackId: "jamendo-1",
-    downloadUrl: "https://audio.example.test/remote.mp3",
+    catalogUrl: "https://www.jamendo.com/track/jamendo-1",
+    downloadUrl: "https://prod-1.storage.jamendo.com/download/track/jamendo-1/mp32/",
+    durationSeconds: 120,
+    metadataVerifiedAt: "2026-09-20T00:00:00.000Z",
     downloadAllowed: true,
-    license: { name: "CC BY", attributionRequired: true },
+    license: { name: "CC BY", url: "https://creativecommons.org/licenses/by/4.0/", attributionRequired: true, attributionText: "Remote Song by Remote Artist", commercialUse: "allowed", derivatives: "allowed" },
   },
   processingEstimateSeconds: 30,
 };

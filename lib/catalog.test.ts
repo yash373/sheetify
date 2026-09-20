@@ -18,7 +18,12 @@ describe("catalog licensing boundary", () => {
     });
     expect(song.source.downloadAllowed).toBe(true);
     expect(song.source.downloadUrl).toBe("https://audio.example/101.mp3");
+    expect(song.source.catalogUrl).toBe("https://www.jamendo.com/track/101");
+    expect(song.source.metadataVerifiedAt).toMatch(/^20/);
     expect(song.source.license.attributionRequired).toBe(true);
+    expect(song.source.license.attributionText).toContain("Licensed Theme by Composer");
+    expect(song.source.license.commercialUse).toBe("allowed");
+    expect(song.source.license.derivatives).toBe("allowed");
     expect(song.title).toBe("Licensed Theme");
   });
 
@@ -33,6 +38,11 @@ describe("catalog licensing boundary", () => {
     });
     expect(song.source.downloadAllowed).toBe(false);
     expect(song.source.downloadUrl).toBeUndefined();
+  });
+
+  it("fails closed for missing permission and ambiguous direct URLs", () => {
+    expect(mapJamendoTrack({ id: "103", name: "Missing", artist_name: "Composer", duration: 90 }).source.downloadAllowed).toBe(false);
+    expect(mapJamendoTrack({ id: "104", name: "Ambiguous", artist_name: "Composer", duration: 90, audiodownload_allowed: true }).source.downloadAllowed).toBe(false);
   });
 
   it("keeps deterministic demo search filtering when no catalog credential is configured", async () => {

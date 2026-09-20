@@ -12,9 +12,12 @@ const song: Song = {
   source: {
     provider: "jamendo",
     trackId: "track-1",
-    downloadUrl: "https://audio.example.test/track-1.mp3",
+    catalogUrl: "https://www.jamendo.com/track/track-1",
+    downloadUrl: "https://prod-1.storage.jamendo.com/download/track/track-1/mp32/",
+    durationSeconds: 12,
+    metadataVerifiedAt: "2026-09-20T00:00:00.000Z",
     downloadAllowed: true,
-    license: { name: "CC BY", attributionRequired: true },
+    license: { name: "CC BY", url: "https://creativecommons.org/licenses/by/4.0/", attributionRequired: true, attributionText: "Licensed Song by Composer", commercialUse: "allowed", derivatives: "allowed" },
   },
   processingEstimateSeconds: 10,
 };

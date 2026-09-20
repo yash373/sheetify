@@ -30,9 +30,16 @@ export function isProcessableSong(value: unknown): value is Song {
     !!song.source &&
     (song.source.provider === "demo" || song.source.provider === "jamendo") &&
     typeof song.source.trackId === "string" &&
+    typeof song.source.catalogUrl === "string" &&
+    typeof song.source.durationSeconds === "number" &&
+    typeof song.source.metadataVerifiedAt === "string" &&
     typeof song.source.downloadAllowed === "boolean" &&
     typeof song.source.license?.name === "string" &&
     typeof song.source.license?.attributionRequired === "boolean" &&
+    typeof song.source.license?.url === "string" &&
+    typeof song.source.license?.attributionText === "string" &&
+    ["allowed", "not-allowed", "unknown"].includes(song.source.license?.commercialUse ?? "") &&
+    ["allowed", "not-allowed", "unknown"].includes(song.source.license?.derivatives ?? "") &&
     (song.source.provider === "demo" || (song.source.downloadAllowed && typeof song.source.downloadUrl === "string"))
   );
 }

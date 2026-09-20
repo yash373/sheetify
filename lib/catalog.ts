@@ -14,53 +14,54 @@ export type JamendoTrack = {
 
 type JamendoResponse = { results?: JamendoTrack[] };
 
-export function mapJamendoTrack(track: JamendoTrack): Song {
-  const downloadAllowed = track.audiodownload_allowed === true && Boolean(track.audiodownload);
-  const license: TrackLicense = {
-    name: track.license_ccurl ? "Creative Commons" : "Jamendo license",
-    ...(track.license_ccurl ? { url: track.license_ccurl } : {}),
-    attributionRequired: true,
-  };
+export type CatalogProvider = {
+  readonly id: "jamendo";
+  search(query: string): Promise<Song[]>;
+};
+
+const JAMENDO_API = "https://api.jamendo.com/v3.0/tracks/";
+const JAMENDO_CATALOG = "https://www.jamendo.com/track";
+
+function licenseMetadata(url: string | undefined, title: string, artist: string): TrackLicense {
+  const normalized = url?.toLowerCase() ?? "";
+  const commercialUse = normalized.includes("by-nc") ? "not-allowed" : normalized.includes("creativecommons.org/licenses/") ? "allowed" : "unknown";
+  const derivatives = normalized.includes("nd") ? "not-allowed" : normalized.includes("creativecommons.org/licenses/") ? "allowed" : "unknown";
+  const licenseUrl = url ?? "https://www.jamendo.com/legal/licenses";
+  return { name: url ? "Creative Commons" : "Jamendo license", url: licenseUrl, attributionRequired: true, attributionText: `${title} by ${artist} — licensed via Jamendo (${licenseUrl})`, commercialUse, derivatives };
+}
+
+export function mapJamendoTrack(track: JamendoTrack, metadataVerifiedAt = new Date().toISOString()): Song {
+  const title = track.name.trim();
+  const artist = track.artist_name.trim();
+  const explicitPermission = track.audiodownload_allowed === true;
+  const directUrl = typeof track.audiodownload === "string" && track.audiodownload.trim() !== "" ? track.audiodownload.trim() : undefined;
+  const downloadAllowed = explicitPermission && Boolean(directUrl);
   return {
-    id: `jamendo-${track.id}`,
-    title: track.name.trim(),
-    artist: track.artist_name.trim(),
-    durationSeconds: track.duration,
-    genre: track.tags?.[0] ?? "Licensed audio",
-    source: {
-      provider: "jamendo",
-      trackId: track.id,
-      sourceUrl: `https://www.jamendo.com/track/${track.id}`,
-      ...(downloadAllowed ? { downloadUrl: track.audiodownload } : {}),
-      downloadAllowed,
-      license,
-    },
+    id: `jamendo-${track.id}`, title, artist, durationSeconds: track.duration, genre: track.tags?.[0] ?? "Licensed audio",
+    source: { provider: "jamendo", trackId: track.id, catalogUrl: `${JAMENDO_CATALOG}/${encodeURIComponent(track.id)}`, ...(downloadAllowed ? { downloadUrl: directUrl } : {}), durationSeconds: track.duration, downloadAllowed, metadataVerifiedAt, license: licenseMetadata(track.license_ccurl, title, artist) },
     processingEstimateSeconds: 90,
   };
 }
 
-async function searchJamendoSongs(query: string, clientId: string) {
-  const params = new URLSearchParams({
-    client_id: clientId,
-    format: "json",
-    limit: "20",
-    search: query,
-    audioformat: "mp32",
-    audiodlformat: "mp32",
-    include: "licenses",
-  });
-  const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, { next: { revalidate: 300 } });
+async function searchJamendoSongs(query: string, clientId: string): Promise<Song[]> {
+  const params = new URLSearchParams({ client_id: clientId, format: "json", limit: "20", search: query, audioformat: "mp32", audiodlformat: "mp32", include: "licenses" });
+  const response = await fetch(`${JAMENDO_API}?${params.toString()}`, { next: { revalidate: 300 } });
   if (!response.ok) throw new Error(`Jamendo search failed with ${response.status}.`);
   const body = await response.json() as JamendoResponse;
-  return (body.results ?? []).map(mapJamendoTrack).filter((song) => song.source.downloadAllowed);
+  const verifiedAt = new Date().toISOString();
+  return (body.results ?? []).map((track) => mapJamendoTrack(track, verifiedAt)).filter((song) => song.source.downloadAllowed && song.source.downloadUrl);
 }
 
+export function createJamendoProvider(clientId = process.env.JAMENDO_CLIENT_ID): CatalogProvider | null {
+  if (!clientId) return null;
+  return { id: "jamendo", search: (query) => searchJamendoSongs(query, clientId) };
+}
+
+export const catalogProviders = { jamendo: createJamendoProvider() } satisfies Partial<Record<CatalogProvider["id"], CatalogProvider | null>>;
+
 export async function searchCatalogSongs(query: string) {
-  const clientId = process.env.JAMENDO_CLIENT_ID;
-  if (!clientId) return { provider: "demo" as const, songs: searchDemoSongs(query) };
-  try {
-    return { provider: "jamendo" as const, songs: await searchJamendoSongs(query, clientId) };
-  } catch {
-    return { provider: "demo" as const, songs: query.trim() ? [] : demoSongs };
-  }
+  const provider = catalogProviders.jamendo;
+  if (!provider) return { provider: "demo" as const, songs: searchDemoSongs(query) };
+  try { return { provider: provider.id, songs: await provider.search(query) }; }
+  catch { return { provider: "demo" as const, songs: query.trim() ? [] : demoSongs }; }
 }

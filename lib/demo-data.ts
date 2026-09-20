@@ -8,7 +8,7 @@ export const demoSongs: Song[] = [
     artist: "The Quiet Room",
     durationSeconds: 214,
     genre: "Ambient pop",
-    source: { provider: "demo", trackId: "moonlit-keys", downloadAllowed: false, license: { name: "Demo catalog", attributionRequired: false } },
+    source: { provider: "demo", trackId: "moonlit-keys", catalogUrl: "https://example.invalid/demo/moonlit-keys", durationSeconds: 124, metadataVerifiedAt: "2026-09-20T00:00:00.000Z", downloadAllowed: false, license: { name: "Demo catalog", url: "https://example.invalid/demo-license", attributionRequired: false, attributionText: "Demo catalog track", commercialUse: "unknown", derivatives: "unknown" } },
     processingEstimateSeconds: 45,
   },
   {
@@ -17,7 +17,7 @@ export const demoSongs: Song[] = [
     artist: "Mina Vale",
     durationSeconds: 187,
     genre: "Indie folk",
-    source: { provider: "demo", trackId: "paper-cranes", downloadAllowed: false, license: { name: "Demo catalog", attributionRequired: false } },
+    source: { provider: "demo", trackId: "paper-cranes", catalogUrl: "https://example.invalid/demo/paper-cranes", durationSeconds: 98, metadataVerifiedAt: "2026-09-20T00:00:00.000Z", downloadAllowed: false, license: { name: "Demo catalog", url: "https://example.invalid/demo-license", attributionRequired: false, attributionText: "Demo catalog track", commercialUse: "unknown", derivatives: "unknown" } },
     processingEstimateSeconds: 45,
   },
   {
@@ -26,7 +26,7 @@ export const demoSongs: Song[] = [
     artist: "Northbound",
     durationSeconds: 242,
     genre: "Instrumental",
-    source: { provider: "demo", trackId: "after-the-rain", downloadAllowed: false, license: { name: "Demo catalog", attributionRequired: false } },
+    source: { provider: "demo", trackId: "after-the-rain", catalogUrl: "https://example.invalid/demo/after-the-rain", durationSeconds: 156, metadataVerifiedAt: "2026-09-20T00:00:00.000Z", downloadAllowed: false, license: { name: "Demo catalog", url: "https://example.invalid/demo-license", attributionRequired: false, attributionText: "Demo catalog track", commercialUse: "unknown", derivatives: "unknown" } },
     processingEstimateSeconds: 45,
   },
   {
@@ -35,7 +35,7 @@ export const demoSongs: Song[] = [
     artist: "Lumen Arcade",
     durationSeconds: 198,
     genre: "Synthwave",
-    source: { provider: "demo", trackId: "starlight-drive", downloadAllowed: false, license: { name: "Demo catalog", attributionRequired: false } },
+    source: { provider: "demo", trackId: "starlight-drive", catalogUrl: "https://example.invalid/demo/starlight-drive", durationSeconds: 141, metadataVerifiedAt: "2026-09-20T00:00:00.000Z", downloadAllowed: false, license: { name: "Demo catalog", url: "https://example.invalid/demo-license", attributionRequired: false, attributionText: "Demo catalog track", commercialUse: "unknown", derivatives: "unknown" } },
     processingEstimateSeconds: 45,
   },
 ];
