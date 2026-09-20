@@ -45,6 +45,8 @@ export type NoteEvent = {
   measure: number;
 };
 
+import type { Notation } from "@/lib/notation";
+
 export type SheetPackage = {
   sheetId: string;
   song: Song;
@@ -54,6 +56,7 @@ export type SheetPackage = {
   timeSignature: string;
   musicXml: string;
   noteEvents: NoteEvent[];
+  notation: Notation;
   generatedAt: string;
 };
 
