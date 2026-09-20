@@ -6,9 +6,12 @@ import type { TrackSource } from "@/lib/types";
 const source: TrackSource = {
   provider: "jamendo",
   trackId: "track-1",
-  downloadUrl: "https://audio.example.test/track-1.mp3",
+  catalogUrl: "https://www.jamendo.com/track/track-1",
+  downloadUrl: "https://prod-1.storage.jamendo.com/download/track/track-1/mp32/",
+  durationSeconds: 120,
+  metadataVerifiedAt: "2026-09-20T00:00:00.000Z",
   downloadAllowed: true,
-  license: { name: "CC BY", attributionRequired: true },
+  license: { name: "CC BY", url: "https://creativecommons.org/licenses/by/4.0/", attributionRequired: true, attributionText: "Track by Composer", commercialUse: "allowed", derivatives: "allowed" },
 };
 
 describe("licensed audio downloader", () => {
@@ -32,5 +35,7 @@ describe("licensed audio downloader", () => {
 
     const largeFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "audio/mpeg" } }));
     await expect(createLicensedAudioDownloader({ fetchImpl: largeFetch, maxBytes: 2 }).download(source)).rejects.toThrow("size limit");
+    await expect(createLicensedAudioDownloader().download({ ...source, downloadUrl: "https://evil.example.test/file.mp3" })).rejects.toThrow("authorized");
+    await expect(createLicensedAudioDownloader({ maxDurationSeconds: 60 }).download(source)).rejects.toThrow("duration limit");
   });
 });
