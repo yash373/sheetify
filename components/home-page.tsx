@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Clock3, Music2, Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,16 @@ export function HomePage() {
   const [query, setQuery] = useState("");
   const [songs, setSongs] = useState<Song[]>([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>("medium");
-  const [cachedSheets, setCachedSheets] = useState<CacheEntry[]>(() => readAllCachedSheets());
+  const subscribeToCache = useCallback((onChange: () => void) => {
+    window.addEventListener("storage", onChange);
+    window.addEventListener("sheetify-cache-change", onChange);
+    return () => {
+      window.removeEventListener("storage", onChange);
+      window.removeEventListener("sheetify-cache-change", onChange);
+    };
+  }, []);
+  const cacheSnapshot = useSyncExternalStore(subscribeToCache, () => JSON.stringify(readAllCachedSheets()), () => "[]");
+  const cachedSheets = useMemo(() => JSON.parse(cacheSnapshot) as CacheEntry[], [cacheSnapshot]);
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
@@ -49,7 +58,6 @@ export function HomePage() {
 
   function deleteCachedSheet(sheet: CacheEntry) {
     removeCache(sheet.song.id, sheet.difficulty);
-    setCachedSheets((current) => current.filter((entry) => entry.sheetId !== sheet.sheetId));
   }
 
   return (
