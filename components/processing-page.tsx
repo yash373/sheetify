@@ -20,19 +20,22 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
   const createdJob = useRef<Promise<string> | null>(null);
   const [activeJobId, setActiveJobId] = useState(jobId === "new" ? "" : jobId);
   const songId = params.get("songId");
+  const songPayload = params.get("song");
   const difficulty = (params.get("difficulty") ?? "medium") as Difficulty;
 
   useEffect(() => {
     if (jobId !== "new") return;
     if (!songId) return;
     if (!createdJob.current) {
-      createdJob.current = fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ songId, difficulty }) }).then(async (response) => {
+      let song: unknown;
+      try { song = songPayload ? JSON.parse(songPayload) : undefined; } catch { song = undefined; }
+      createdJob.current = fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ songId, difficulty, song }) }).then(async (response) => {
         if (!response.ok) throw new Error("This demo song could not be prepared.");
         return (await response.json() as { jobId: string }).jobId;
       });
     }
     void createdJob.current.then(setActiveJobId).catch((nextError: unknown) => setError(nextError instanceof Error ? nextError.message : "This demo song could not be prepared."));
-  }, [difficulty, jobId, songId]);
+  }, [difficulty, jobId, songId, songPayload]);
 
   useEffect(() => {
     if (!activeJobId || activeJobId === "new") return;

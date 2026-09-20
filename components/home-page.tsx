@@ -21,6 +21,7 @@ function formatDuration(seconds: number) {
 
 function songHref(song: Song, difficulty: Difficulty) {
   const params = new URLSearchParams({ songId: song.id, difficulty });
+  if (song.source.provider !== "demo") params.set("song", JSON.stringify(song));
   return `/processing/new?${params.toString()}`;
 }
 
