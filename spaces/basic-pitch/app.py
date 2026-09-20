@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from pathlib import Path
 from time import monotonic
 from typing import Any
 
@@ -55,12 +56,15 @@ def transcribe(audio_path: str | None, request: gr.Request | None = None) -> dic
     if not audio_path:
         raise gr.Error("Upload a short audio file to transcribe.")
     _check_rate_limit(_client_key(request))
-    duration = get_duration(filename=audio_path)
-    if duration <= 0 or duration > MAX_AUDIO_SECONDS:
-        raise gr.Error(f"Audio must be between 1 second and {MAX_AUDIO_SECONDS} seconds.")
+    try:
+        duration = get_duration(filename=audio_path)
+        if duration <= 0 or duration > MAX_AUDIO_SECONDS:
+            raise gr.Error(f"Audio must be between 1 second and {MAX_AUDIO_SECONDS} seconds.")
 
-    _, _, raw_notes = predict(audio_path, model_or_model_path=ICASSP_2022_MODEL_PATH)
-    return {"model": "spotify-basic-pitch", "duration_seconds": float(duration), "notes": _normalize_notes(raw_notes)}
+        _, _, raw_notes = predict(audio_path, model_or_model_path=ICASSP_2022_MODEL_PATH)
+        return {"model": "spotify-basic-pitch", "duration_seconds": float(duration), "notes": _normalize_notes(raw_notes)}
+    finally:
+        Path(audio_path).unlink(missing_ok=True)
 
 
 demo = gr.Interface(

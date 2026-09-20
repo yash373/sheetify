@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Clock3, Music2, Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Clock3, Music2, Search, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { readAllCachedSheets, removeCache } from "@/lib/cache";
+import { readAllCachedSheets, removeCache, writeCache } from "@/lib/cache";
+import { createSheetFromTranscription } from "@/lib/processing-pipeline";
 import { difficulties } from "@/lib/types";
 import type { CacheEntry, Difficulty, Song } from "@/lib/types";
 
@@ -26,16 +28,21 @@ function songHref(song: Song, difficulty: Difficulty) {
 }
 
 function sourceSummary(song: Song) {
+  if (song.source.provider === "upload") return `Your audio · processed privately on this device · ${song.processingEstimateSeconds}s estimate`;
   return song.source.downloadAllowed
     ? `${song.source.provider === "jamendo" ? "Jamendo" : "Licensed source"} · download permitted · ${song.processingEstimateSeconds}s estimate`
     : `Demo source · ${song.processingEstimateSeconds}s estimate`;
 }
 
 export function HomePage() {
+  const router = useRouter();
+  const uploadInput = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [songs, setSongs] = useState<Song[]>([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>("medium");
   const [cachedSheets, setCachedSheets] = useState<CacheEntry[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState("");
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setCachedSheets(readAllCachedSheets()));
@@ -64,6 +71,58 @@ export function HomePage() {
     setCachedSheets((current) => current.filter((entry) => entry.sheetId !== sheet.sheetId));
   }
 
+  async function processUpload(file: File | undefined) {
+    if (!file) return;
+    setUploadError("");
+    setUploadProgress(1);
+    try {
+      const { transcribeAudioFile } = await import("@/lib/browser-basic-pitch");
+      const transcription = await transcribeAudioFile(file, setUploadProgress);
+      const title = file.name.replace(/\.[^.]+$/, "").trim() || "Uploaded audio";
+      const id = `upload-${crypto.randomUUID()}`;
+      const song: Song = {
+        id,
+        title,
+        artist: "Your audio",
+        durationSeconds: Math.round(transcription.durationSeconds),
+        genre: "Uploaded recording",
+        source: {
+          provider: "upload",
+          trackId: id,
+          catalogUrl: "about:blank",
+          durationSeconds: transcription.durationSeconds,
+          downloadAllowed: false,
+          metadataVerifiedAt: new Date().toISOString(),
+          license: {
+            name: "User-provided audio",
+            url: "about:blank",
+            attributionRequired: false,
+            attributionText: "Processed locally from audio you selected.",
+            commercialUse: "unknown",
+            derivatives: "unknown",
+          },
+        },
+        processingEstimateSeconds: 90,
+      };
+      const tempo = selectedDifficulty === "beginner" ? 76 : selectedDifficulty === "medium" ? 92 : 108;
+      const sheet = createSheetFromTranscription({
+        song,
+        difficulty: selectedDifficulty,
+        tempo,
+        transcription,
+        sheetId: `sheet-${crypto.randomUUID()}`,
+      });
+      setUploadProgress(100);
+      writeCache(sheet);
+      router.push(`/practice/${sheet.sheetId}`);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "This audio could not be transcribed.");
+      setUploadProgress(null);
+    } finally {
+      if (uploadInput.current) uploadInput.current.value = "";
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-7 sm:px-8 lg:px-12">
       <header className="flex items-center justify-between border-b border-border/80 pb-5">
@@ -85,8 +144,43 @@ export function HomePage() {
           </div>
 
           <div className="mt-8 space-y-2">
-            {songs.map((song) => <Link href={songHref(song, selectedDifficulty)} key={song.id} className="group flex items-center justify-between rounded-xl border border-transparent px-4 py-3 transition-colors hover:border-border hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span><span className="block text-sm font-medium">{song.title}</span><span className="block text-xs text-muted-foreground">{song.artist} · {song.genre}</span><span className="mt-1 block text-[11px] text-muted-foreground">{sourceSummary(song)}{song.source.license.attributionRequired ? " · attribution recorded" : ""}</span><span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground"><span>{song.source.downloadAllowed ? "Authorized download" : "Download unavailable"}</span><a href={song.source.license.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="underline underline-offset-2 hover:text-foreground">{song.source.license.name}</a><a href={song.source.catalogUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="underline underline-offset-2 hover:text-foreground">Source</a></span></span><span className="text-xs text-muted-foreground transition-transform group-hover:translate-x-1">Open →</span></Link>)}
+            {songs.map((song) => (
+              <div key={song.id} className="group flex items-center justify-between rounded-xl border border-transparent px-4 py-3 transition-colors hover:border-border hover:bg-card">
+                <span>
+                  <span className="block text-sm font-medium">{song.title}</span>
+                  <span className="block text-xs text-muted-foreground">{song.artist} · {song.genre}</span>
+                  <span className="mt-1 block text-[11px] text-muted-foreground">{sourceSummary(song)}{song.source.license.attributionRequired ? " · attribution recorded" : ""}</span>
+                  <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    <span>{song.source.downloadAllowed ? "Authorized download" : "Download unavailable"}</span>
+                    <a href={song.source.license.url} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">{song.source.license.name}</a>
+                    <a href={song.source.catalogUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Source</a>
+                  </span>
+                </span>
+                <Link href={songHref(song, selectedDifficulty)} className="text-xs text-muted-foreground transition-transform hover:text-foreground group-hover:translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Open →</Link>
+              </div>
+            ))}
             {!isSearching && query && songs.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">No songs found. Try another title or artist.</p>}
+          </div>
+
+          <div className="mt-6 rounded-xl border border-dashed border-border bg-card/50 p-4">
+            <input
+              ref={uploadInput}
+              type="file"
+              accept="audio/mpeg,audio/wav,audio/ogg,audio/flac,.mp3,.wav,.ogg,.flac"
+              className="sr-only"
+              onChange={(event) => void processUpload(event.target.files?.[0])}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Use your own audio</p>
+                <p className="mt-1 text-xs text-muted-foreground">MP3, WAV, OGG, or FLAC · up to 3 minutes · processed on this device</p>
+              </div>
+              <Button type="button" variant="outline" disabled={uploadProgress !== null} onClick={() => uploadInput.current?.click()}>
+                <Upload className="size-4" />
+                {uploadProgress === null ? "Choose audio" : `Transcribing ${uploadProgress}%`}
+              </Button>
+            </div>
+            {uploadError && <p className="mt-3 text-xs text-destructive" role="alert">{uploadError}</p>}
           </div>
         </div>
 

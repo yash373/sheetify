@@ -2,7 +2,7 @@ import { notationToMusicXml } from "@/lib/notation";
 import { createLicensedAudioDownloader } from "@/lib/audio-download";
 import { transcriptionToNotation } from "@/lib/transcription-to-notation";
 import { createHostedBasicPitchAdapter } from "@/lib/transcription";
-import type { AudioArtifact, TranscriptionProvider } from "@/lib/transcription";
+import type { AudioArtifact, TranscriptionProvider, TranscriptionResult } from "@/lib/transcription";
 import type { Difficulty, NoteEvent, SheetPackage, Song } from "@/lib/types";
 
 export type AudioDownloader = {
@@ -69,6 +69,39 @@ function noteEventsFromSheet(sheet: SheetPackage["notation"]): NoteEvent[] {
   })));
 }
 
+export function createSheetFromTranscription({
+  song,
+  difficulty,
+  tempo,
+  transcription,
+  sheetId,
+}: {
+  song: Song;
+  difficulty: Difficulty;
+  tempo: number;
+  transcription: TranscriptionResult;
+  sheetId: string;
+}): SheetPackage {
+  const notation = transcriptionToNotation(transcription, {
+    title: song.title,
+    artist: song.artist,
+    tempo,
+    difficulty,
+  });
+  return {
+    sheetId,
+    song,
+    difficulty,
+    tempo: notation.tempo,
+    key: keyLabelFromFifths(notation.keyFifths),
+    timeSignature: "4/4",
+    musicXml: notationToMusicXml(notation),
+    noteEvents: noteEventsFromSheet(notation),
+    notation,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
 export async function processLicensedSong(request: ProcessingRequest) {
   const { song, difficulty, tempo, downloader, transcriber, cache } = request;
   if (!song.source.downloadAllowed || !song.source.downloadUrl) {
@@ -83,25 +116,8 @@ export async function processLicensedSong(request: ProcessingRequest) {
   try {
     audio = await downloader.download(song.source);
     const transcription = await transcriber.transcribe(audio);
-    const notation = transcriptionToNotation(transcription, {
-      title: song.title,
-      artist: song.artist,
-      tempo,
-      difficulty,
-    });
     const sheetId = `${key}:result`;
-    const sheet: SheetPackage = {
-      sheetId,
-      song,
-      difficulty,
-      tempo: notation.tempo,
-      key: keyLabelFromFifths(notation.keyFifths),
-      timeSignature: "4/4",
-      musicXml: notationToMusicXml(notation),
-      noteEvents: noteEventsFromSheet(notation),
-      notation,
-      generatedAt: new Date().toISOString(),
-    };
+    const sheet = createSheetFromTranscription({ song, difficulty, tempo, transcription, sheetId });
     await cache.set(key, sheet);
     return { sheet, cacheHit: false };
   } finally {
