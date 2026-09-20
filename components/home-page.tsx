@@ -18,7 +18,7 @@ import type { CacheEntry, Difficulty, Song } from "@/lib/types";
 const difficultyLabels: Record<Difficulty, string> = { beginner: "Beginner", medium: "Medium", hard: "Hard" };
 
 function formatDuration(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  return seconds > 0 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "Duration unavailable";
 }
 
 function songHref(song: Song, difficulty: Difficulty) {
@@ -29,6 +29,7 @@ function songHref(song: Song, difficulty: Difficulty) {
 
 function sourceSummary(song: Song) {
   if (song.source.provider === "upload") return `Your audio · processed privately on this device · ${song.processingEstimateSeconds}s estimate`;
+  if (song.source.provider === "imslp") return "IMSLP metadata · audio not attached · upload audio to transcribe";
   return song.source.downloadAllowed
     ? `${song.source.provider === "jamendo" ? "Jamendo" : "Licensed source"} · download permitted · ${song.processingEstimateSeconds}s estimate`
     : `Demo source · ${song.processingEstimateSeconds}s estimate`;
@@ -156,7 +157,7 @@ export function HomePage() {
                     <a href={song.source.catalogUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Source</a>
                   </span>
                 </span>
-                <Link href={songHref(song, selectedDifficulty)} className="text-xs text-muted-foreground transition-transform hover:text-foreground group-hover:translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Open →</Link>
+                {song.source.downloadAllowed || song.source.provider === "demo" ? <Link href={songHref(song, selectedDifficulty)} className="text-xs text-muted-foreground transition-transform hover:text-foreground group-hover:translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Open →</Link> : <span className="text-right text-[11px] text-muted-foreground">Metadata only<br />Use your own audio</span>}
               </div>
             ))}
             {!isSearching && query && songs.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">No songs found. Try another title or artist.</p>}
