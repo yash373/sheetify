@@ -88,36 +88,71 @@ function makeRest(id: string, onset: number, duration: number, measure: number, 
 const restDurations = [4, 2, 1.5, 1, 0.75, 0.5, 0.25];
 
 export function fillRests(events: NotationEvent[], beatsPerMeasure = 4) {
-  const sorted = [...events].sort((a, b) => a.onset - b.onset);
-  const result: NotationEvent[] = [];
-  let cursor = 0;
-  const appendRestsUntil = (target: number, voice: number, staff: number) => {
-    while (target - cursor > 0.0001) {
-      const remaining = beatsPerMeasure - (cursor % beatsPerMeasure);
-      const maxDuration = Math.min(target - cursor, remaining);
-      const duration = restDurations.find((candidate) => candidate <= maxDuration + 0.0001) ?? 0.25;
-      const measure = Math.floor(cursor / beatsPerMeasure) + 1;
-      result.push(makeRest(`rest-${measure}-${cursor}`, cursor, duration, measure, cursor % beatsPerMeasure, voice, staff));
-      cursor += duration;
-    }
-  };
-
-  for (const event of sorted) {
-    appendRestsUntil(event.onset, event.voice, event.staff);
-    result.push(event);
-    cursor = Math.max(cursor, event.onset + event.durationBeats);
+  const grouped = new Map<string, NotationEvent[]>();
+  for (const event of events) {
+    const key = `${event.voice}:${event.staff}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), event]);
   }
-  if (sorted.length > 0) {
-    const finalBoundary = Math.ceil(cursor / beatsPerMeasure) * beatsPerMeasure;
-    const last = sorted[sorted.length - 1];
-    appendRestsUntil(finalBoundary, last.voice, last.staff);
+  const result: NotationEvent[] = [];
+  for (const group of grouped.values()) {
+    const sorted = group.slice().sort((a, b) => a.onset - b.onset || a.id.localeCompare(b.id));
+    let cursor = 0;
+    const appendRestsUntil = (target: number) => {
+      while (target - cursor > 0.0001) {
+        const remaining = beatsPerMeasure - (cursor % beatsPerMeasure);
+        const maxDuration = Math.min(target - cursor, remaining);
+        const duration = restDurations.find((candidate) => candidate <= maxDuration + 0.0001) ?? 0.25;
+        const measure = Math.floor(cursor / beatsPerMeasure) + 1;
+        const first = sorted[0];
+        result.push(makeRest(`rest-${first.voice}-${first.staff}-${measure}-${cursor}`, cursor, duration, measure, cursor % beatsPerMeasure, first.voice, first.staff));
+        cursor += duration;
+      }
+    };
+    for (const event of sorted) {
+      appendRestsUntil(event.onset);
+      result.push(event);
+      cursor = Math.max(cursor, event.onset + event.durationBeats);
+    }
+    if (sorted.length > 0) appendRestsUntil(Math.ceil(cursor / beatsPerMeasure) * beatsPerMeasure);
+  }
+  return result.sort((a, b) => a.onset - b.onset || a.voice - b.voice || a.staff - b.staff);
+}
+
+function normalizeGroups(events: NotationEvent[]) {
+  const result = [...events];
+  const groups = new Map<string, number[]>();
+  result.forEach((event, index) => {
+    if (event.kind !== "note") return;
+    const key = `${event.voice}:${event.staff}:${event.measure}`;
+    groups.set(key, [...(groups.get(key) ?? []), index]);
+  });
+  for (const indices of groups.values()) {
+    const shortNotes = indices.filter((index) => result[index].durationBeats <= 0.5);
+    for (let index = 0; index < shortNotes.length; ) {
+      const run: number[][] = [[shortNotes[index]]];
+      while (shortNotes[index + 1] !== undefined) {
+        const currentGroup = run[run.length - 1];
+        const current = result[currentGroup[currentGroup.length - 1]];
+        const nextIndex = shortNotes[index + 1];
+        const next = result[nextIndex];
+        if (next.onset > current.onset + current.durationBeats + 0.0001) break;
+        if (Math.abs(next.onset - current.onset) < 0.0001) currentGroup.push(nextIndex);
+        else run.push([nextIndex]);
+        index += 1;
+      }
+      if (run.length > 1) run.forEach((eventGroup, position) => {
+        const beam = position === 0 ? "begin" : position === run.length - 1 ? "end" : "continue";
+        eventGroup.forEach((eventIndex) => { result[eventIndex] = { ...result[eventIndex], beam }; });
+      });
+      index += 1;
+    }
   }
   return result;
 }
 
 export function createNotation(input: Omit<Notation, "measures"> & { events: NotationEvent[] }): Notation {
   const beatsPerMeasure = input.timeSignature.beats * (4 / input.timeSignature.beatType);
-  const events = fillRests(input.events, beatsPerMeasure);
+  const events = normalizeGroups(fillRests(input.events, beatsPerMeasure));
   const measures = new Map<number, NotationEvent[]>();
   for (const event of events) {
     const list = measures.get(event.measure) ?? [];
@@ -135,10 +170,11 @@ function eventXml(event: NotationEvent, divisions: number) {
   const duration = Math.round(event.durationBeats * divisions);
   const type = event.writtenDuration === "16th" ? "16th" : event.writtenDuration;
   const pitch = event.kind === "rest" || !event.pitch ? "<rest/>" : `<pitch><step>${event.pitch.step}</step>${event.pitch.alter ? `<alter>${event.pitch.alter}</alter>` : ""}<octave>${event.pitch.octave}</octave></pitch>`;
+  const accidental = event.accidental ?? (event.pitch?.alter === 1 ? "sharp" : event.pitch?.alter === -1 ? "flat" : undefined);
   const tie = `${event.tieStart ? '<tie type="start"/>' : ""}${event.tieStop ? '<tie type="stop"/>' : ""}`;
   const notations = event.tieStart || event.tieStop ? `<notations>${event.tieStart ? '<tied type="start"/>' : ""}${event.tieStop ? '<tied type="stop"/>' : ""}</notations>` : "";
   const beam = event.beam ? `<beam number="1">${event.beam}</beam>` : "";
-  return `<note>${pitch}${event.chordId ? "<chord/>" : ""}<duration>${duration}</duration><voice>${event.voice}</voice><type>${type}</type>${event.dots ? "<dot/>".repeat(event.dots) : ""}${event.accidental ? `<accidental>${event.accidental}</accidental>` : ""}${tie}${beam}${notations}</note>`;
+  return `<note>${pitch}${event.chordId ? "<chord/>" : ""}<duration>${duration}</duration><voice>${event.voice}</voice><type>${type}</type>${event.dots ? "<dot/>".repeat(event.dots) : ""}${accidental ? `<accidental>${accidental}</accidental>` : ""}${tie}${beam}${notations}</note>`;
 }
 
 export function notationToMusicXml(notation: Notation) {
