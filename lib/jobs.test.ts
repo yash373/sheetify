@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { createJob, getJob, getSheet, isProcessableSong, MAX_JOB_RETRIES, retryJob } from "@/lib/jobs";
+import { createJob, getJob, getSheet, isProcessableSong, MAX_JOB_RETRIES, retryJob, startHostedJob } from "@/lib/jobs";
 import type { Song } from "@/lib/types";
 
 const licensedSong: Song = {
@@ -37,5 +37,15 @@ describe("job catalog handoff", () => {
     expect(getJob(jobId!)).toMatchObject({ retryCount: 0, maxRetries: MAX_JOB_RETRIES });
     const retryId = retryJob(jobId!);
     expect(getJob(retryId!)).toMatchObject({ retryCount: 1, maxRetries: MAX_JOB_RETRIES });
+  });
+
+  it("uses the hosted pipeline for licensed jobs instead of demo output", async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "audio/mpeg" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "basic-pitch-v1", notes: [{ start_time_s: 0, end_time_s: 1, pitch_midi: 60, velocity: 0.8 }] }), { status: 200 }));
+    const jobId = createJob("hosted-song", "medium", { ...licensedSong, id: "hosted-song" });
+    expect(await startHostedJob(jobId!, { endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl })).toBe(true);
+    expect(getJob(jobId!)).toMatchObject({ stage: "ready", sheetId: `sheet-${jobId}` });
+    expect(getSheet(`sheet-${jobId}`)?.musicXml).toContain("<step>C</step>");
   });
 });
