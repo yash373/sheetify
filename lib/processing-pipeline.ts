@@ -1,0 +1,94 @@
+import { notationToMusicXml } from "@/lib/notation";
+import { transcriptionToNotation } from "@/lib/transcription-to-notation";
+import type { AudioArtifact, TranscriptionProvider } from "@/lib/transcription";
+import type { Difficulty, NoteEvent, SheetPackage, Song } from "@/lib/types";
+
+export type AudioDownloader = {
+  download(source: Song["source"]): Promise<AudioArtifact>;
+};
+
+export type SheetCache = {
+  get(key: string): Promise<SheetPackage | null>;
+  set(key: string, sheet: SheetPackage): Promise<void>;
+};
+
+export type ProcessingRequest = {
+  song: Song;
+  difficulty: Difficulty;
+  tempo: number;
+  transcriptionModel: string;
+  downloader: AudioDownloader;
+  transcriber: TranscriptionProvider;
+  cache: SheetCache;
+};
+
+export class LicensingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LicensingError";
+  }
+}
+
+export function processingCacheKey(request: Pick<ProcessingRequest, "song" | "difficulty" | "transcriptionModel">) {
+  return [
+    "sheetify",
+    request.song.source.provider,
+    request.song.source.trackId,
+    request.difficulty,
+    request.transcriptionModel,
+  ].map((part) => encodeURIComponent(part)).join(":");
+}
+
+function pitchLabel(pitch: NonNullable<SheetPackage["notation"]["measures"][number]["events"][number]["pitch"]>) {
+  return `${pitch.step}${pitch.alter === 1 ? "#" : pitch.alter === -1 ? "b" : ""}${pitch.octave}`;
+}
+
+function noteEventsFromSheet(sheet: SheetPackage["notation"]): NoteEvent[] {
+  return sheet.measures.flatMap((measure) => measure.events.filter((event) => event.kind === "note" && event.pitch && typeof event.midi === "number").map((event) => ({
+    id: event.id,
+    pitch: pitchLabel(event.pitch!),
+    midi: event.midi!,
+    start: event.onset,
+    duration: event.durationBeats,
+    measure: event.measure,
+  })));
+}
+
+export async function processLicensedSong(request: ProcessingRequest) {
+  const { song, difficulty, tempo, downloader, transcriber, cache } = request;
+  if (!song.source.downloadAllowed || !song.source.downloadUrl) {
+    throw new LicensingError(`Audio download is not permitted for ${song.title}.`);
+  }
+
+  const key = processingCacheKey(request);
+  const cached = await cache.get(key);
+  if (cached) return { sheet: cached, cacheHit: true };
+
+  let audio: AudioArtifact | undefined;
+  try {
+    audio = await downloader.download(song.source);
+    const transcription = await transcriber.transcribe(audio);
+    const notation = transcriptionToNotation(transcription, {
+      title: song.title,
+      artist: song.artist,
+      tempo,
+    });
+    const sheetId = `${key}:result`;
+    const sheet: SheetPackage = {
+      sheetId,
+      song,
+      difficulty,
+      tempo,
+      key: "C major",
+      timeSignature: "4/4",
+      musicXml: notationToMusicXml(notation),
+      noteEvents: noteEventsFromSheet(notation),
+      notation,
+      generatedAt: new Date().toISOString(),
+    };
+    await cache.set(key, sheet);
+    return { sheet, cacheHit: false };
+  } finally {
+    await audio?.cleanup?.();
+  }
+}
