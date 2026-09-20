@@ -81,6 +81,7 @@ export type SheetPackage = {
 
 export type CacheEntry = SheetPackage & {
   schemaVersion: 1;
+  expiresAt: string;
 };
 
 export type SearchResponse = {

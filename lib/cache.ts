@@ -1,8 +1,9 @@
-import type { CacheEntry, Difficulty } from "@/lib/types";
+import type { CacheEntry, Difficulty, SheetPackage } from "@/lib/types";
 
 const CACHE_PREFIX = "sheetify:";
 const SCHEMA_VERSION = 1 as const;
 const MAX_ENTRY_BYTES = 450_000;
+export const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function cacheKey(songId: string, difficulty: Difficulty) {
   return `${CACHE_PREFIX}${encodeURIComponent(songId)}:${difficulty}`;
@@ -17,7 +18,10 @@ function isCacheEntry(value: unknown): value is CacheEntry {
     typeof entry.difficulty === "string" &&
     typeof entry.song?.id === "string" &&
     Array.isArray(entry.noteEvents) &&
-    typeof entry.musicXml === "string"
+    typeof entry.musicXml === "string" &&
+    typeof entry.expiresAt === "string" &&
+    Number.isFinite(Date.parse(entry.expiresAt)) &&
+    Date.parse(entry.expiresAt) > Date.now()
   );
 }
 
@@ -39,10 +43,10 @@ export function readCache(songId: string, difficulty: Difficulty): CacheEntry | 
   }
 }
 
-export function writeCache(entry: Omit<CacheEntry, "schemaVersion">) {
+export function writeCache(entry: SheetPackage) {
   if (typeof window === "undefined") return false;
 
-  const value: CacheEntry = { ...entry, schemaVersion: SCHEMA_VERSION };
+  const value: CacheEntry = { ...entry, schemaVersion: SCHEMA_VERSION, expiresAt: new Date(Date.now() + CACHE_TTL_MS).toISOString() };
   const serialized = JSON.stringify(value);
   if (new Blob([serialized]).size > MAX_ENTRY_BYTES) return false;
 
@@ -65,6 +69,7 @@ export function readAllCachedSheets() {
     try {
       const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? "");
       if (isCacheEntry(parsed)) entries.push(parsed);
+      else window.localStorage.removeItem(key);
     } catch {
       window.localStorage.removeItem(key);
     }
