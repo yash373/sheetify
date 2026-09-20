@@ -24,8 +24,9 @@ const JAMENDO_CATALOG = "https://www.jamendo.com/track";
 
 function licenseMetadata(url: string | undefined, title: string, artist: string): TrackLicense {
   const normalized = url?.toLowerCase() ?? "";
-  const commercialUse = normalized.includes("by-nc") ? "not-allowed" : normalized.includes("creativecommons.org/licenses/") ? "allowed" : "unknown";
-  const derivatives = normalized.includes("nd") ? "not-allowed" : normalized.includes("creativecommons.org/licenses/") ? "allowed" : "unknown";
+  const isCreativeCommons = normalized.includes("creativecommons.org/licenses/") || normalized.includes("creativecommons.org/publicdomain/zero/");
+  const commercialUse = normalized.includes("by-nc") ? "not-allowed" : isCreativeCommons ? "allowed" : "unknown";
+  const derivatives = normalized.includes("-nd/") || normalized.includes("/nd/") ? "not-allowed" : isCreativeCommons ? "allowed" : "unknown";
   const licenseUrl = url ?? "https://www.jamendo.com/legal/licenses";
   return { name: url ? "Creative Commons" : "Jamendo license", url: licenseUrl, attributionRequired: true, attributionText: `${title} by ${artist} — licensed via Jamendo (${licenseUrl})`, commercialUse, derivatives };
 }
@@ -35,10 +36,11 @@ export function mapJamendoTrack(track: JamendoTrack, metadataVerifiedAt = new Da
   const artist = track.artist_name.trim();
   const explicitPermission = track.audiodownload_allowed === true;
   const directUrl = typeof track.audiodownload === "string" && track.audiodownload.trim() !== "" ? track.audiodownload.trim() : undefined;
-  const downloadAllowed = explicitPermission && Boolean(directUrl);
+  const license = licenseMetadata(track.license_ccurl, title, artist);
+  const downloadAllowed = explicitPermission && Boolean(directUrl) && license.commercialUse === "allowed" && license.derivatives === "allowed";
   return {
     id: `jamendo-${track.id}`, title, artist, durationSeconds: track.duration, genre: track.tags?.[0] ?? "Licensed audio",
-    source: { provider: "jamendo", trackId: track.id, catalogUrl: `${JAMENDO_CATALOG}/${encodeURIComponent(track.id)}`, ...(downloadAllowed ? { downloadUrl: directUrl } : {}), durationSeconds: track.duration, downloadAllowed, metadataVerifiedAt, license: licenseMetadata(track.license_ccurl, title, artist) },
+    source: { provider: "jamendo", trackId: track.id, catalogUrl: `${JAMENDO_CATALOG}/${encodeURIComponent(track.id)}`, ...(downloadAllowed ? { downloadUrl: directUrl } : {}), durationSeconds: track.duration, downloadAllowed, metadataVerifiedAt, license },
     processingEstimateSeconds: 90,
   };
 }
