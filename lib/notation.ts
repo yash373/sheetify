@@ -85,31 +85,32 @@ function makeRest(id: string, onset: number, duration: number, measure: number, 
   return { id, kind: "rest", onset, durationBeats: duration, ...durationForBeats(duration), measure, beat, voice, staff };
 }
 
+const restDurations = [4, 2, 1.5, 1, 0.75, 0.5, 0.25];
+
 export function fillRests(events: NotationEvent[], beatsPerMeasure = 4) {
   const sorted = [...events].sort((a, b) => a.onset - b.onset);
   const result: NotationEvent[] = [];
   let cursor = 0;
-  for (const event of sorted) {
-    while (event.onset - cursor > 0.0001) {
-      const measure = Math.floor(cursor / beatsPerMeasure) + 1;
+  const appendRestsUntil = (target: number, voice: number, staff: number) => {
+    while (target - cursor > 0.0001) {
       const remaining = beatsPerMeasure - (cursor % beatsPerMeasure);
-      const duration = Math.min(event.onset - cursor, remaining);
-      result.push(makeRest(`rest-${measure}-${cursor}`, cursor, duration, measure, cursor % beatsPerMeasure, event.voice, event.staff));
+      const maxDuration = Math.min(target - cursor, remaining);
+      const duration = restDurations.find((candidate) => candidate <= maxDuration + 0.0001) ?? 0.25;
+      const measure = Math.floor(cursor / beatsPerMeasure) + 1;
+      result.push(makeRest(`rest-${measure}-${cursor}`, cursor, duration, measure, cursor % beatsPerMeasure, voice, staff));
       cursor += duration;
     }
+  };
+
+  for (const event of sorted) {
+    appendRestsUntil(event.onset, event.voice, event.staff);
     result.push(event);
     cursor = Math.max(cursor, event.onset + event.durationBeats);
   }
   if (sorted.length > 0) {
     const finalBoundary = Math.ceil(cursor / beatsPerMeasure) * beatsPerMeasure;
-    while (finalBoundary - cursor > 0.0001) {
-      const measure = Math.floor(cursor / beatsPerMeasure) + 1;
-      const remaining = beatsPerMeasure - (cursor % beatsPerMeasure);
-      const duration = Math.min(finalBoundary - cursor, remaining);
-      const last = sorted[sorted.length - 1];
-      result.push(makeRest(`rest-${measure}-${cursor}`, cursor, duration, measure, cursor % beatsPerMeasure, last.voice, last.staff));
-      cursor += duration;
-    }
+    const last = sorted[sorted.length - 1];
+    appendRestsUntil(finalBoundary, last.voice, last.staff);
   }
   return result;
 }
