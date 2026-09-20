@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   if (!created) return NextResponse.json({ error: "That demo song is not available." }, { status: 404 });
   const job = await getJob(created.jobId);
   if (job?.song.source.provider !== "demo") void startHostedJob(created.jobId);
-  const response = NextResponse.json({ jobId: created.jobId, accessToken: created.accessToken }, { status: 201 });
+  const response = NextResponse.json({ jobId: created.jobId, accessToken: created.accessToken, ...(created.sheet ? { sheet: created.sheet } : {}) }, { status: 201 });
   response.headers.append("Set-Cookie", accessCookie(created.jobId, created.accessToken));
   return response;
 }

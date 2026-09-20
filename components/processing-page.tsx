@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import type { Difficulty, JobStatus } from "@/lib/types";
+import { writeCache } from "@/lib/cache";
+import type { Difficulty, JobStatus, SheetPackage } from "@/lib/types";
 
 const labels: Record<Difficulty, string> = {
   beginner: "Beginner",
@@ -34,6 +35,7 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
   const createdJob = useRef<Promise<{
     jobId: string;
     accessToken: string;
+    sheet?: SheetPackage;
   }> | null>(null);
   const accessToken = useRef("");
   const [activeJobId, setActiveJobId] = useState(jobId === "new" ? "" : jobId);
@@ -67,13 +69,30 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
         const created = (await response.json()) as {
           jobId: string;
           accessToken?: string;
+          sheet?: SheetPackage;
         };
-        return { jobId: created.jobId, accessToken: created.accessToken ?? "" };
+        return { jobId: created.jobId, accessToken: created.accessToken ?? "", sheet: created.sheet };
       });
     }
     void createdJob.current
       .then((created) => {
         accessToken.current = created.accessToken ?? "";
+        if (created.sheet) {
+          writeCache(created.sheet);
+          setStatus({
+            jobId: created.jobId,
+            song: created.sheet.song,
+            difficulty: created.sheet.difficulty,
+            retryCount: 0,
+            maxRetries: 3,
+            stage: "ready",
+            progress: 100,
+            message: "Your practice sheet is ready.",
+            sheetId: created.sheet.sheetId,
+          });
+          window.setTimeout(() => router.push(`/practice/${created.sheet?.sheetId}`), 500);
+          return;
+        }
         setActiveJobId(created.jobId);
       })
       .catch((nextError: unknown) =>
@@ -83,7 +102,7 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
             : "This demo song could not be prepared.",
         ),
       );
-  }, [difficulty, jobId, songId, songPayload]);
+  }, [difficulty, jobId, router, songId, songPayload]);
 
   useEffect(() => {
     if (!activeJobId || activeJobId === "new") return;

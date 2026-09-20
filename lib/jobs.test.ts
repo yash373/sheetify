@@ -34,6 +34,13 @@ describe("job catalog handoff", () => {
     expect(await getJob(created!.jobId)).toMatchObject({ song: licensedSong, difficulty: "medium" });
   });
 
+  it("returns a cacheable demo sheet for stateless deployments", async () => {
+    const created = await createJob("moonlit-keys", "medium");
+    expect(created?.sheet).toMatchObject({ song: { id: "moonlit-keys" }, difficulty: "medium" });
+    expect(await getJob(created!.jobId)).toMatchObject({ stage: "ready", sheetId: created!.sheet?.sheetId });
+    expect(await getSheet(created!.sheet!.sheetId, created!.accessToken)).toMatchObject({ sheetId: created!.sheet!.sheetId });
+  });
+
   it("creates bounded retry jobs with retry metadata", async () => {
     const created = await createJob("retry-song", "beginner", { ...licensedSong, id: "retry-song" });
     expect(await getJob(created!.jobId)).toMatchObject({ retryCount: 0, maxRetries: MAX_JOB_RETRIES });

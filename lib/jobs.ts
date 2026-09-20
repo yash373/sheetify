@@ -58,24 +58,14 @@ export async function createJob(songId: string, difficulty: Difficulty, supplied
   const token = newAccessToken();
   const jobId = `job_${randomBytes(12).toString("base64url")}`;
   await getDurableStore().putJob(baseRecord(jobId, token, candidate, difficulty));
-  if (candidate.source.provider === "demo") void runDemoJob(jobId);
-  return { jobId, accessToken: token };
-}
-
-async function runDemoJob(jobId: string) {
-  for (let step = 0; step < stages.length; step += 1) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 80));
-    const record = await getDurableStore().getJob(jobId);
-    if (!record || record.stage === "failed" || record.stage === "ready") return;
-    const stage = stages[step];
-    await getDurableStore().updateJob(jobId, { stage: stage.name, progress: stage.progress, message: stage.message, leaseUntil: undefined });
+  if (candidate.source.provider === "demo") {
+    const sheetId = `sheet_${randomBytes(12).toString("base64url")}`;
+    const sheet = createDemoSheet(candidate, difficulty, sheetId);
+    await persistSheet(jobId, `demo:${candidate.id}:${difficulty}`, sheet, candidate);
+    await getDurableStore().updateJob(jobId, { stage: "ready", progress: 100, message: "Your practice sheet is ready.", sheetId, leaseUntil: undefined });
+    return { jobId, accessToken: token, sheet };
   }
-  const record = await getDurableStore().getJob(jobId);
-  if (!record) return;
-  const sheetId = `sheet_${randomBytes(12).toString("base64url")}`;
-  const sheet = createDemoSheet(record.song, record.difficulty, sheetId);
-  await persistSheet(jobId, `demo:${record.song.id}:${record.difficulty}`, sheet, record.song);
-  await getDurableStore().updateJob(jobId, { stage: "ready", progress: 100, message: "Your practice sheet is ready.", sheetId, leaseUntil: undefined });
+  return { jobId, accessToken: token };
 }
 
 export async function getJob(jobId: string, accessToken?: string) {

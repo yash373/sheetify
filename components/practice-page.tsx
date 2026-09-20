@@ -20,7 +20,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { ScoreRenderer } from "@/components/score-renderer";
-import { writeCache } from "@/lib/cache";
+import { readAllCachedSheets, writeCache } from "@/lib/cache";
 import {
   noteIndexAtBeat,
   noteIndicesCrossed,
@@ -83,6 +83,15 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
 
   useEffect(() => {
     let active = true;
+    let cachedFrame: number | undefined;
+    const cachedSheet = readAllCachedSheets().find((entry) => entry.sheetId === sheetId);
+    if (cachedSheet) {
+      cachedFrame = window.requestAnimationFrame(() => {
+        if (!active) return;
+        setSheet(cachedSheet);
+        setTempo(cachedSheet.tempo);
+      });
+    }
     fetch(`/api/sheets/${sheetId}`, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Practice sheet not found.");
@@ -95,10 +104,11 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
         writeCache(nextSheet);
       })
       .catch((nextError: Error) => {
-        if (active) setError(nextError.message);
+        if (active && !cachedSheet) setError(nextError.message);
       });
     return () => {
       active = false;
+      if (cachedFrame) window.cancelAnimationFrame(cachedFrame);
     };
   }, [sheetId]);
 
