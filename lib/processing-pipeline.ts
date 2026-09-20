@@ -53,6 +53,11 @@ function pitchLabel(pitch: NonNullable<SheetPackage["notation"]["measures"][numb
   return `${pitch.step}${pitch.alter === 1 ? "#" : pitch.alter === -1 ? "b" : ""}${pitch.octave}`;
 }
 
+function keyLabelFromFifths(fifths: number) {
+  const names: Record<number, string> = { [-7]: "Cb", [-6]: "Gb", [-5]: "Db", [-4]: "Ab", [-3]: "Eb", [-2]: "Bb", [-1]: "F", 0: "C", 1: "G", 2: "D", 3: "A", 4: "E", 5: "B", 6: "F#", 7: "C#" };
+  return `${names[fifths] ?? "C"} major`;
+}
+
 function noteEventsFromSheet(sheet: SheetPackage["notation"]): NoteEvent[] {
   return sheet.measures.flatMap((measure) => measure.events.filter((event) => event.kind === "note" && event.pitch && typeof event.midi === "number").map((event) => ({
     id: event.id,
@@ -82,14 +87,15 @@ export async function processLicensedSong(request: ProcessingRequest) {
       title: song.title,
       artist: song.artist,
       tempo,
+      difficulty,
     });
     const sheetId = `${key}:result`;
     const sheet: SheetPackage = {
       sheetId,
       song,
       difficulty,
-      tempo,
-      key: "C major",
+      tempo: notation.tempo,
+      key: keyLabelFromFifths(notation.keyFifths),
       timeSignature: "4/4",
       musicXml: notationToMusicXml(notation),
       noteEvents: noteEventsFromSheet(notation),
