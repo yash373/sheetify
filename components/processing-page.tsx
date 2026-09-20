@@ -18,7 +18,8 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
-  const createdJob = useRef<Promise<string> | null>(null);
+  const createdJob = useRef<Promise<{ jobId: string; accessToken: string }> | null>(null);
+  const accessToken = useRef("");
   const [activeJobId, setActiveJobId] = useState(jobId === "new" ? "" : jobId);
   const songId = params.get("songId");
   const songPayload = params.get("song");
@@ -35,10 +36,14 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
           const payload = await response.json().catch(() => null) as { error?: string } | null;
           throw new Error(payload?.error ?? "This practice sheet could not be prepared.");
         }
-        return (await response.json() as { jobId: string }).jobId;
+        const created = await response.json() as { jobId: string; accessToken?: string };
+        return { jobId: created.jobId, accessToken: created.accessToken ?? "" };
       });
     }
-    void createdJob.current.then(setActiveJobId).catch((nextError: unknown) => setError(nextError instanceof Error ? nextError.message : "This demo song could not be prepared."));
+    void createdJob.current.then((created) => {
+      accessToken.current = created.accessToken ?? "";
+      setActiveJobId(created.jobId);
+    }).catch((nextError: unknown) => setError(nextError instanceof Error ? nextError.message : "This demo song could not be prepared."));
   }, [difficulty, jobId, songId, songPayload]);
 
   useEffect(() => {
@@ -47,7 +52,8 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
     let active = true;
 
     async function poll() {
-      const response = await fetch(`/api/jobs/${activeJobId}`, { cache: "no-store" });
+      const headers = accessToken.current ? { "x-job-access-token": accessToken.current } : undefined;
+      const response = await fetch(`/api/jobs/${activeJobId}`, { cache: "no-store", headers });
       if (!response.ok) { setError("This processing session expired. Return home and try again."); return; }
       const nextStatus = await response.json() as JobStatus;
       if (!active) return;
@@ -73,7 +79,8 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
     setRetrying(true);
     const response = await fetch(`/api/jobs/${activeJobId}/retry`, { method: "POST" });
     if (!response.ok) { setError("This processing job has reached its retry limit."); setRetrying(false); return; }
-    const nextJob = await response.json() as { jobId: string };
+    const nextJob = await response.json() as { jobId: string; accessToken?: string };
+    accessToken.current = nextJob.accessToken ?? accessToken.current;
     setError("");
     setStatus(null);
     setActiveJobId(nextJob.jobId);

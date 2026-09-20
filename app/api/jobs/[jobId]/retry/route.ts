@@ -14,7 +14,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ jo
   if (!nextJob) return NextResponse.json({ error: "This processing job cannot be retried." }, { status: 409 });
   const nextStatus = await getJob(nextJob.jobId);
   if (nextStatus?.song.source.provider !== "demo") void startHostedJob(nextJob.jobId);
-  const response = NextResponse.json({ jobId: nextJob.jobId }, { status: 201 });
+  const response = NextResponse.json({ jobId: nextJob.jobId, accessToken: token }, { status: 201 });
   response.headers.append("Set-Cookie", accessCookie(nextJob.jobId, token));
   return response;
 }
