@@ -353,24 +353,15 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
               {sheet.song.artist} · {sheet.key} · {sheet.timeSignature}
             </p>
             <p className="mt-2 max-w-2xl text-xs text-muted-foreground">
-              {sheet.song.source.license.attributionText} ·{" "}
-              <a
-                href={sheet.song.source.license.url}
-                target="_blank"
-                rel="noreferrer"
-                className="underline underline-offset-2 hover:text-foreground"
-              >
-                {sheet.song.source.license.name}
-              </a>{" "}
-              ·{" "}
-              <a
-                href={sheet.song.source.catalogUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="underline underline-offset-2 hover:text-foreground"
-              >
-                Catalog source
-              </a>
+              {sheet.song.source.license.attributionText}
+              {sheet.song.source.provider !== "upload" && (
+                <>
+                  {" · "}
+                  <a href={sheet.song.source.license.url} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">{sheet.song.source.license.name}</a>
+                  {" · "}
+                  <a href={sheet.song.source.catalogUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Catalog source</a>
+                </>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-5 text-xs text-muted-foreground">

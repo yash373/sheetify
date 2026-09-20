@@ -12,7 +12,7 @@ export type TrackLicense = {
 };
 
 export type TrackSource = {
-  provider: "demo" | "jamendo";
+  provider: "demo" | "jamendo" | "upload";
   trackId: string;
   catalogUrl: string;
   downloadUrl?: string;

@@ -2,7 +2,7 @@ import { withRetries } from "@/lib/retry";
 
 export type AudioArtifact = { bytes: Uint8Array; contentType: string; filename: string; cleanup?: () => Promise<void> | void };
 export type TranscriptionNote = { startTimeSeconds: number; endTimeSeconds: number; pitchMidi: number; velocity: number };
-export type TranscriptionResult = { provider: "basic-pitch-hosted"; model: string; durationSeconds: number; notes: TranscriptionNote[] };
+export type TranscriptionResult = { provider: "basic-pitch-hosted" | "basic-pitch-browser"; model: string; durationSeconds: number; notes: TranscriptionNote[] };
 
 export interface TranscriptionProvider {
   readonly id: TranscriptionResult["provider"];
