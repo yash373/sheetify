@@ -1,8 +1,11 @@
 import { createDemoSheet, findDemoSong } from "@/lib/demo-data";
+import { createHostedProcessingPipeline } from "@/lib/processing-pipeline";
 import type { Difficulty, JobStatus, Song } from "@/lib/types";
 
 const registeredSongs = new Map<string, Song>();
 const retryCounts = new Map<string, number>();
+const runtimeStatuses = new Map<string, JobStatus>();
+const runtimeSheets = new Map<string, Awaited<ReturnType<typeof createDemoSheet>>>();
 export const MAX_JOB_RETRIES = 3;
 const stages: Array<{ name: JobStatus["stage"]; start: number; end: number; message: string }> = [
   { name: "queued", start: 0, end: 8, message: "Your practice sheet is in line." },
@@ -43,6 +46,44 @@ export function createJob(songId: string, difficulty: Difficulty, suppliedSong?:
   return jobId;
 }
 
+export function hostedPipelineConfigured() {
+  return Boolean(process.env.BASIC_PITCH_ENDPOINT);
+}
+
+function tempoForDifficulty(difficulty: Difficulty) {
+  return difficulty === "beginner" ? 76 : difficulty === "medium" ? 92 : 108;
+}
+
+export async function startHostedJob(jobId: string, options: { endpoint?: string; token?: string; fetchImpl?: typeof fetch } = {}) {
+  const [, difficulty] = jobId.split("--");
+  const song = registeredSongs.get(jobId);
+  if (!song || song.source.provider === "demo" || !["beginner", "medium", "hard"].includes(difficulty ?? "")) return false;
+  const typedDifficulty = difficulty as Difficulty;
+  const base = { jobId, song, difficulty: typedDifficulty, retryCount: retryCounts.get(jobId) ?? 0, maxRetries: MAX_JOB_RETRIES };
+  runtimeStatuses.set(jobId, { ...base, stage: "transcribing", progress: 45, message: "Listening for melody, rhythm, and harmony." });
+
+  try {
+    const result = await createHostedProcessingPipeline(options)({
+      song,
+      difficulty: typedDifficulty,
+      tempo: tempoForDifficulty(typedDifficulty),
+      transcriptionModel: process.env.BASIC_PITCH_MODEL ?? "basic-pitch",
+      cache: {
+        get: async () => null,
+        set: async () => undefined,
+      },
+    });
+    const sheetId = `sheet-${jobId}`;
+    const sheet = { ...result.sheet, sheetId };
+    runtimeSheets.set(jobId, sheet);
+    runtimeStatuses.set(jobId, { ...base, stage: "ready", progress: 100, message: result.cacheHit ? "Your cached practice sheet is ready." : "Your practice sheet is ready.", sheetId });
+    return true;
+  } catch (error) {
+    runtimeStatuses.set(jobId, { ...base, stage: "failed", progress: 100, message: "Transcription could not be completed.", error: error instanceof Error ? error.message : "Hosted transcription failed." });
+    return false;
+  }
+}
+
 export function retryJob(jobId: string) {
   const [songId, difficulty] = jobId.split("--");
   const song = registeredSongs.get(jobId) ?? findDemoSong(songId ?? "");
@@ -56,6 +97,8 @@ export function retryJob(jobId: string) {
 }
 
 export function getJob(jobId: string): JobStatus | null {
+  const runtimeStatus = runtimeStatuses.get(jobId);
+  if (runtimeStatus) return runtimeStatus;
   const [songId, difficulty, createdAtToken] = jobId.split("--");
   const createdAt = Number.parseInt(createdAtToken ?? "", 36);
   const song = registeredSongs.get(jobId) ?? findDemoSong(songId ?? "");
@@ -75,6 +118,8 @@ export function getJob(jobId: string): JobStatus | null {
 
 export function getSheet(sheetId: string) {
   const jobId = sheetId.startsWith("sheet-") ? sheetId.slice(6) : "";
+  const runtimeSheet = runtimeSheets.get(jobId);
+  if (runtimeSheet) return runtimeSheet;
   const [songId, difficulty] = jobId.split("--");
   const song = registeredSongs.get(jobId) ?? findDemoSong(songId ?? "");
   if (!song || !["beginner", "medium", "hard"].includes(difficulty ?? "")) return null;

@@ -31,7 +31,10 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
       let song: unknown;
       try { song = songPayload ? JSON.parse(songPayload) : undefined; } catch { song = undefined; }
       createdJob.current = fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ songId, difficulty, song }) }).then(async (response) => {
-        if (!response.ok) throw new Error("This demo song could not be prepared.");
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as { error?: string } | null;
+          throw new Error(payload?.error ?? "This practice sheet could not be prepared.");
+        }
         return (await response.json() as { jobId: string }).jobId;
       });
     }
