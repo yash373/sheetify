@@ -35,7 +35,7 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
   }, [difficulty, jobId, songId]);
 
   useEffect(() => {
-    if (!activeJobId) return;
+    if (!activeJobId || activeJobId === "new") return;
     let timer: number | undefined;
     let active = true;
 
