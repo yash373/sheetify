@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createJob, getJob, getSheet, isProcessableSong } from "@/lib/jobs";
+import { createJob, getJob, getSheet, isProcessableSong, MAX_JOB_RETRIES, retryJob } from "@/lib/jobs";
 import type { Song } from "@/lib/types";
 
 const licensedSong: Song = {
@@ -30,5 +30,12 @@ describe("job catalog handoff", () => {
     expect(jobId).toBeTruthy();
     expect(getJob(jobId!)).toMatchObject({ song: licensedSong, difficulty: "medium" });
     expect(getSheet(`sheet-${jobId}`)).toMatchObject({ song: licensedSong, difficulty: "medium" });
+  });
+
+  it("creates bounded retry jobs with retry metadata", () => {
+    const jobId = createJob("retry-song", "beginner", { ...licensedSong, id: "retry-song" });
+    expect(getJob(jobId!)).toMatchObject({ retryCount: 0, maxRetries: MAX_JOB_RETRIES });
+    const retryId = retryJob(jobId!);
+    expect(getJob(retryId!)).toMatchObject({ retryCount: 1, maxRetries: MAX_JOB_RETRIES });
   });
 });
