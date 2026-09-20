@@ -4,16 +4,21 @@ export type Difficulty = (typeof difficulties)[number];
 
 export type TrackLicense = {
   name: string;
-  url?: string;
+  url: string;
   attributionRequired: boolean;
+  attributionText: string;
+  commercialUse: "allowed" | "not-allowed" | "unknown";
+  derivatives: "allowed" | "not-allowed" | "unknown";
 };
 
 export type TrackSource = {
   provider: "demo" | "jamendo";
   trackId: string;
-  sourceUrl?: string;
+  catalogUrl: string;
   downloadUrl?: string;
+  durationSeconds: number;
   downloadAllowed: boolean;
+  metadataVerifiedAt: string;
   license: TrackLicense;
 };
 

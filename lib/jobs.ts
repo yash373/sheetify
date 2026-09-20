@@ -21,7 +21,28 @@ export function newAccessToken() { return randomBytes(24).toString("base64url");
 export function isProcessableSong(value: unknown): value is Song {
   if (!value || typeof value !== "object") return false;
   const song = value as Partial<Song> & { source?: Partial<Song["source"]> };
-  return typeof song.id === "string" && typeof song.title === "string" && typeof song.artist === "string" && typeof song.durationSeconds === "number" && typeof song.genre === "string" && typeof song.processingEstimateSeconds === "number" && !!song.source && (song.source.provider === "demo" || song.source.provider === "jamendo") && typeof song.source.trackId === "string" && typeof song.source.downloadAllowed === "boolean" && typeof song.source.license?.name === "string" && typeof song.source.license?.attributionRequired === "boolean" && (song.source.provider === "demo" || (song.source.downloadAllowed && typeof song.source.downloadUrl === "string"));
+  return (
+    typeof song.id === "string" &&
+    typeof song.title === "string" &&
+    typeof song.artist === "string" &&
+    typeof song.durationSeconds === "number" &&
+    typeof song.genre === "string" &&
+    typeof song.processingEstimateSeconds === "number" &&
+    !!song.source &&
+    (song.source.provider === "demo" || song.source.provider === "jamendo") &&
+    typeof song.source.trackId === "string" &&
+    typeof song.source.catalogUrl === "string" &&
+    typeof song.source.durationSeconds === "number" &&
+    typeof song.source.metadataVerifiedAt === "string" &&
+    typeof song.source.downloadAllowed === "boolean" &&
+    typeof song.source.license?.name === "string" &&
+    typeof song.source.license?.attributionRequired === "boolean" &&
+    typeof song.source.license?.url === "string" &&
+    typeof song.source.license?.attributionText === "string" &&
+    ["allowed", "not-allowed", "unknown"].includes(song.source.license?.commercialUse ?? "") &&
+    ["allowed", "not-allowed", "unknown"].includes(song.source.license?.derivatives ?? "") &&
+    (song.source.provider === "demo" || (song.source.downloadAllowed && typeof song.source.downloadUrl === "string"))
+  );
 }
 
 export function hostedPipelineConfigured() { return Boolean(process.env.BASIC_PITCH_ENDPOINT); }
