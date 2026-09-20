@@ -27,6 +27,7 @@ BASIC_PITCH_ENDPOINT=https://<owner>-<space>.hf.space
 BASIC_PITCH_TOKEN=<server-only Hugging Face token>
 BASIC_PITCH_API_NAME=predict
 BASIC_PITCH_MODEL=basic-pitch
+NEON_DATABASE_URL=postgresql://<user>:<password>@<host>/<database>?sslmode=require
 ```
 
 The endpoint is the Space base URL. Sheetify uploads audio in memory, submits the Gradio queue, polls its SSE result, and retains only normalized note events. A deployed Space, valid token, ZeroGPU quota, and provider behavior still require live validation; tests use mocked fetch responses and do not establish those external gates.

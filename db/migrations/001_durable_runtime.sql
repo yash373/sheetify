@@ -23,8 +23,8 @@ CREATE INDEX IF NOT EXISTS jobs_expiry_idx ON jobs (expires_at);
 
 CREATE TABLE IF NOT EXISTS sheets (
   sheet_id TEXT PRIMARY KEY,
-  owner_job_id TEXT NOT NULL REFERENCES jobs(job_id),
-  cache_key TEXT NOT NULL UNIQUE,
+  owner_job_id TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+  cache_key TEXT NOT NULL,
   musicxml TEXT NOT NULL,
   playback_events JSONB NOT NULL,
   license_metadata JSONB NOT NULL,
@@ -35,5 +35,5 @@ CREATE TABLE IF NOT EXISTS sheets (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS sheets_cache_key_idx ON sheets (cache_key);
 CREATE INDEX IF NOT EXISTS sheets_expiry_idx ON sheets (expires_at);
--- Deliberately absent: source audio and raw provider transcripts are not persisted.
