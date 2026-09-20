@@ -42,9 +42,11 @@ describe("job catalog handoff", () => {
   it("uses the hosted pipeline for licensed jobs instead of demo output", async () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "audio/mpeg" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "basic-pitch-v1", notes: [{ start_time_s: 0, end_time_s: 1, pitch_midi: 60, velocity: 0.8 }] }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify(["/tmp/gradio/remote.mp3"]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ event_id: "job-event" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("event: complete\ndata: {\"model\":\"basic-pitch-v1\",\"notes\":[{\"start_time_s\":0,\"end_time_s\":1,\"pitch_midi\":60,\"velocity\":0.8}]}\n\n", { status: 200 }));
     const jobId = createJob("hosted-song", "medium", { ...licensedSong, id: "hosted-song" });
-    expect(await startHostedJob(jobId!, { endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl })).toBe(true);
+    expect(await startHostedJob(jobId!, { endpoint: "https://transcriber.example.test", token: "token", fetchImpl })).toBe(true);
     expect(getJob(jobId!)).toMatchObject({ stage: "ready", sheetId: `sheet-${jobId}` });
     expect(getSheet(`sheet-${jobId}`)?.musicXml).toContain("<step>C</step>");
 

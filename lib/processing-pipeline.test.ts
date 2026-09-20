@@ -88,9 +88,11 @@ describe("licensed processing pipeline", () => {
   it("composes the licensed downloader and hosted transcriber", async () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "audio/mpeg" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "basic-pitch-v1", notes: [{ start_time_s: 0, end_time_s: 1, pitch_midi: 60, velocity: 0.8 }] }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify(["/tmp/gradio/track.mp3"]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ event_id: "pipeline-event" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("event: complete\ndata: {\"model\":\"basic-pitch-v1\",\"notes\":[{\"start_time_s\":0,\"end_time_s\":1,\"pitch_midi\":60,\"velocity\":0.8}]}\n\n", { status: 200 }));
     const cache = createCache();
-    const result = await createHostedProcessingPipeline({ endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl })({
+    const result = await createHostedProcessingPipeline({ endpoint: "https://transcriber.example.test", token: "token", fetchImpl })({
       song,
       difficulty: "beginner",
       tempo: 60,
@@ -99,6 +101,6 @@ describe("licensed processing pipeline", () => {
     });
 
     expect(result.sheet.noteEvents[0]).toMatchObject({ pitch: "C4", duration: 1 });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 });
