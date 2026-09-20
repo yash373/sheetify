@@ -47,5 +47,11 @@ describe("job catalog handoff", () => {
     expect(await startHostedJob(jobId!, { endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl })).toBe(true);
     expect(getJob(jobId!)).toMatchObject({ stage: "ready", sheetId: `sheet-${jobId}` });
     expect(getSheet(`sheet-${jobId}`)?.musicXml).toContain("<step>C</step>");
+
+    const cachedJobId = createJob("hosted-song-cached", "medium", { ...licensedSong, id: "hosted-song-cached" });
+    const shouldNotDownload = vi.fn<typeof fetch>();
+    expect(await startHostedJob(cachedJobId!, { endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl: shouldNotDownload })).toBe(true);
+    expect(getJob(cachedJobId!)).toMatchObject({ stage: "ready", message: "Your cached practice sheet is ready." });
+    expect(shouldNotDownload).not.toHaveBeenCalled();
   });
 });
