@@ -76,6 +76,13 @@ export async function advanceJob(jobId: string, accessToken: string) {
   const leased = await store.acquireAdvanceLease(jobId, new Date(), ADVANCE_LEASE_MS);
   if (!leased) return null;
   if (leased.stage === "ready" || leased.stage === "failed") return toJobStatus(leased);
+  if (leased.stage === "caching" && leased.song.source.provider === "demo") {
+    const sheetId = `sheet_${randomBytes(12).toString("base64url")}`;
+    const sheet = createDemoSheet(leased.song, leased.difficulty, sheetId);
+    await persistSheet(jobId, `demo:${leased.song.id}:${leased.difficulty}`, sheet, leased.song);
+    const completed = await store.updateJob(jobId, { stage: "ready", progress: 100, message: "Your practice sheet is ready.", sheetId, leaseUntil: undefined });
+    return completed ? toJobStatus(completed) : null;
+  }
   const nextIndex = Math.min(stages.length - 1, Math.max(0, stages.findIndex((stage) => stage.name === leased.stage) + 1));
   const next = stages[nextIndex];
   const updated = await store.updateJob(jobId, { stage: next.name, progress: next.progress, message: next.message, leaseUntil: undefined });
