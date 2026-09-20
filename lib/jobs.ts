@@ -1,15 +1,5 @@
 import { createDemoSheet, findDemoSong } from "@/lib/demo-data";
-import type { Difficulty, JobStatus, SheetPackage } from "@/lib/types";
-
-type JobRecord = {
-  jobId: string;
-  songId: string;
-  difficulty: Difficulty;
-  createdAt: number;
-  sheet?: SheetPackage;
-};
-
-const jobs = new Map<string, JobRecord>();
+import type { Difficulty, JobStatus } from "@/lib/types";
 const stages: Array<{ name: JobStatus["stage"]; start: number; end: number; message: string }> = [
   { name: "queued", start: 0, end: 8, message: "Your practice sheet is in line." },
   { name: "preparing", start: 8, end: 18, message: "Preparing the arrangement request." },
@@ -23,29 +13,31 @@ export function createJob(songId: string, difficulty: Difficulty) {
   const song = findDemoSong(songId);
   if (!song) return null;
 
-  const jobId = crypto.randomUUID();
-  jobs.set(jobId, { jobId, songId, difficulty, createdAt: Date.now() });
-  return jobId;
+  return `${songId}--${difficulty}--${Date.now().toString(36)}`;
 }
 
 export function getJob(jobId: string): JobStatus | null {
-  const job = jobs.get(jobId);
-  if (!job) return null;
-  const song = findDemoSong(job.songId);
+  const [songId, difficulty, createdAtToken] = jobId.split("--");
+  const createdAt = Number.parseInt(createdAtToken ?? "", 36);
+  const song = findDemoSong(songId ?? "");
+  if (!song || !Number.isFinite(createdAt) || !["beginner", "medium", "hard"].includes(difficulty ?? "")) return null;
+  const typedDifficulty = difficulty as Difficulty;
   if (!song) return null;
 
-  const elapsed = Date.now() - job.createdAt;
+  const elapsed = Date.now() - createdAt;
   const progress = Math.min(100, Math.floor(elapsed / 85));
   if (progress >= 100) {
-    if (!job.sheet) job.sheet = createDemoSheet(song, job.difficulty, `sheet-${job.jobId}`);
-    return { jobId, song, difficulty: job.difficulty, stage: "ready", progress: 100, message: "Your practice sheet is ready.", sheetId: job.sheet.sheetId };
+    return { jobId, song, difficulty: typedDifficulty, stage: "ready", progress: 100, message: "Your practice sheet is ready.", sheetId: `sheet-${jobId}` };
   }
 
   const current = stages.find((stage) => progress >= stage.start && progress < stage.end) ?? stages[0];
-  return { jobId, song, difficulty: job.difficulty, stage: current.name, progress, message: current.message };
+  return { jobId, song, difficulty: typedDifficulty, stage: current.name, progress, message: current.message };
 }
 
 export function getSheet(sheetId: string) {
-  for (const job of jobs.values()) if (job.sheet?.sheetId === sheetId) return job.sheet;
-  return null;
+  const jobId = sheetId.startsWith("sheet-") ? sheetId.slice(6) : "";
+  const [songId, difficulty] = jobId.split("--");
+  const song = findDemoSong(songId ?? "");
+  if (!song || !["beginner", "medium", "hard"].includes(difficulty ?? "")) return null;
+  return createDemoSheet(song, difficulty as Difficulty, sheetId);
 }
