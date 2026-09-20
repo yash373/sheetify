@@ -1,3 +1,4 @@
+import { createNotation, durationForBeats, midiToPitch, notationToMusicXml } from "@/lib/notation";
 import type { Difficulty, NoteEvent, SheetPackage, Song } from "@/lib/types";
 
 export const demoSongs: Song[] = [
@@ -47,19 +48,6 @@ function midiForPitch(pitch: string) {
   return (Number(match[3]) + 1) * 12 + semitones[match[1]] + accidental;
 }
 
-function createMusicXml(song: Song, difficulty: Difficulty, noteEvents: NoteEvent[]) {
-  const notes = noteEvents.map((note) => {
-    const match = note.pitch.match(/^([A-G])([#b]?)(\d)$/);
-    const step = match?.[1] ?? "C";
-    const alter = match?.[2] ? `<alter>${match[2] === "#" ? 1 : -1}</alter>` : "";
-    const octave = match?.[3] ?? "4";
-    const isEighth = difficulty === "hard" && note.id.endsWith("-0");
-    return `<note><pitch><step>${step}</step>${alter}<octave>${octave}</octave></pitch><duration>${isEighth ? 2 : 4}</duration><voice>1</voice><type>${isEighth ? "eighth" : "quarter"}</type></note>`;
-  });
-  const measures = [0, 1].map((measureIndex) => `<measure number="${measureIndex + 1}">${measureIndex === 0 ? "<attributes><divisions>4</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>" : ""}${notes.slice(measureIndex * 4, measureIndex * 4 + 4).join("")}</measure>`).join("");
-  return `<score-partwise version="4.0"><work><work-title>${song.title}</work-title></work><identification><creator type="composer">${song.artist}</creator></identification><part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list><part id="P1">${measures}</part></score-partwise>`;
-}
-
 export function findDemoSong(songId: string) {
   return demoSongs.find((song) => song.id === songId);
 }
@@ -83,10 +71,34 @@ export function createDemoSheet(
     id: `${sheetId}-note-${index}`,
     pitch: demoPitches[index],
     midi: midiForPitch(demoPitches[index]) + (offset - [0, 4, 7, 11, 7, 4, 2, 5][index]),
-    start: index * 0.75,
-    duration: difficulty === "hard" && index % 3 === 0 ? 0.5 : 0.7,
+    start: index,
+    duration: difficulty === "hard" && index % 3 === 0 ? 0.5 : 1,
     measure: Math.floor(index / 4) + 1,
   }));
+
+  const notation = createNotation({
+    title: song.title,
+    artist: song.artist,
+    tempo: difficulty === "beginner" ? 76 : difficulty === "medium" ? 92 : 108,
+    divisions: 4,
+    keyFifths: 0,
+    timeSignature: { beats: 4, beatType: 4 },
+    clef: "G",
+    events: noteEvents.map((note) => ({
+      id: note.id,
+      kind: "note",
+      pitch: midiToPitch(note.midi),
+      midi: note.midi,
+      onset: note.start,
+      durationBeats: note.duration,
+      ...durationForBeats(note.duration),
+      measure: note.measure,
+      beat: note.start % 4,
+      voice: 1,
+      staff: 1,
+      beam: note.duration <= 0.5 ? "continue" : undefined,
+    })),
+  });
 
   return {
     sheetId,
@@ -95,8 +107,9 @@ export function createDemoSheet(
     tempo: difficulty === "beginner" ? 76 : difficulty === "medium" ? 92 : 108,
     key: "C major",
     timeSignature: "4/4",
-    musicXml: createMusicXml(song, difficulty, noteEvents),
+    musicXml: notationToMusicXml(notation),
     noteEvents,
+    notation,
     generatedAt: new Date().toISOString(),
   };
 }
