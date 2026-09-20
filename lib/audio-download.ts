@@ -11,7 +11,7 @@ export class AudioDownloadError extends Error {
   }
 }
 
-type AudioDownloadOptions = {
+export type AudioDownloadOptions = {
   fetchImpl?: typeof fetch;
   maxBytes?: number;
 };

@@ -1,5 +1,7 @@
 import { notationToMusicXml } from "@/lib/notation";
+import { createLicensedAudioDownloader } from "@/lib/audio-download";
 import { transcriptionToNotation } from "@/lib/transcription-to-notation";
+import { createHostedBasicPitchAdapter } from "@/lib/transcription";
 import type { AudioArtifact, TranscriptionProvider } from "@/lib/transcription";
 import type { Difficulty, NoteEvent, SheetPackage, Song } from "@/lib/types";
 
@@ -21,6 +23,14 @@ export type ProcessingRequest = {
   transcriber: TranscriptionProvider;
   cache: SheetCache;
 };
+
+export type HostedProcessingRequest = Omit<ProcessingRequest, "downloader" | "transcriber">;
+
+export function createHostedProcessingPipeline(options: { endpoint?: string; token?: string; fetchImpl?: typeof fetch } = {}) {
+  const downloader = createLicensedAudioDownloader({ fetchImpl: options.fetchImpl });
+  const transcriber = createHostedBasicPitchAdapter({ endpoint: options.endpoint, token: options.token, fetchImpl: options.fetchImpl });
+  return (request: HostedProcessingRequest) => processLicensedSong({ ...request, downloader, transcriber });
+}
 
 export class LicensingError extends Error {
   constructor(message: string) {
