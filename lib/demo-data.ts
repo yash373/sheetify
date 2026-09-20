@@ -8,6 +8,8 @@ export const demoSongs: Song[] = [
     artist: "The Quiet Room",
     durationSeconds: 214,
     genre: "Ambient pop",
+    source: { provider: "demo", trackId: "moonlit-keys", downloadAllowed: false, license: { name: "Demo catalog", attributionRequired: false } },
+    processingEstimateSeconds: 45,
   },
   {
     id: "paper-cranes",
@@ -15,6 +17,8 @@ export const demoSongs: Song[] = [
     artist: "Mina Vale",
     durationSeconds: 187,
     genre: "Indie folk",
+    source: { provider: "demo", trackId: "paper-cranes", downloadAllowed: false, license: { name: "Demo catalog", attributionRequired: false } },
+    processingEstimateSeconds: 45,
   },
   {
     id: "after-the-rain",
@@ -22,6 +26,8 @@ export const demoSongs: Song[] = [
     artist: "Northbound",
     durationSeconds: 242,
     genre: "Instrumental",
+    source: { provider: "demo", trackId: "after-the-rain", downloadAllowed: false, license: { name: "Demo catalog", attributionRequired: false } },
+    processingEstimateSeconds: 45,
   },
   {
     id: "starlight-drive",
@@ -29,6 +35,8 @@ export const demoSongs: Song[] = [
     artist: "Lumen Arcade",
     durationSeconds: 198,
     genre: "Synthwave",
+    source: { provider: "demo", trackId: "starlight-drive", downloadAllowed: false, license: { name: "Demo catalog", attributionRequired: false } },
+    processingEstimateSeconds: 45,
   },
 ];
 
