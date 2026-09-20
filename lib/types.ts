@@ -2,17 +2,36 @@ export const difficulties = ["beginner", "medium", "hard"] as const;
 
 export type Difficulty = (typeof difficulties)[number];
 
+export type TrackLicense = {
+  name: string;
+  url?: string;
+  attributionRequired: boolean;
+};
+
+export type TrackSource = {
+  provider: "demo" | "jamendo";
+  trackId: string;
+  sourceUrl?: string;
+  downloadUrl?: string;
+  downloadAllowed: boolean;
+  license: TrackLicense;
+};
+
 export type Song = {
   id: string;
   title: string;
   artist: string;
   durationSeconds: number;
   genre: string;
+  source: TrackSource;
+  processingEstimateSeconds: number;
 };
 
 export type AudioSource = {
-  kind: "demo";
-  songId: string;
+  provider: TrackSource["provider"];
+  trackId: string;
+  downloadUrl?: string;
+  license: TrackLicense;
 };
 
 export type JobStage =
