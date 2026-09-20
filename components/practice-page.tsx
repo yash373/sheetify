@@ -5,7 +5,7 @@ import { ChevronLeft, CircleHelp, Pause, Play, RotateCcw, SkipBack, Volume2 } fr
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { writeCache } from "@/lib/cache";
@@ -117,7 +117,7 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  if (error) return <main className="flex min-h-screen items-center justify-center p-6"><div className="max-w-md text-center"><h1 className="font-heading text-4xl">Sheet unavailable</h1><p className="mt-3 text-muted-foreground">{error} This demo session may have expired.</p><Button className="mt-7" render={<Link href="/" />}>Return home</Button></div></main>;
+  if (error) return <main className="flex min-h-screen items-center justify-center p-6"><div className="max-w-md text-center"><h1 className="font-heading text-4xl">Sheet unavailable</h1><p className="mt-3 text-muted-foreground">{error} This demo session may have expired.</p><Link className={`${buttonVariants()} mt-7`} href="/">Return home</Link></div></main>;
   if (!sheet) return <main className="flex min-h-screen items-center justify-center p-6 text-muted-foreground">Loading your practice sheet…</main>;
 
   const currentMeasure = sheet.noteEvents.find((note) => note.start <= elapsed && note.start + note.duration >= elapsed)?.measure ?? 1;
