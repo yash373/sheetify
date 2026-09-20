@@ -17,7 +17,7 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
   const router = useRouter();
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [error, setError] = useState("");
-  const started = useRef(false);
+  const createdJob = useRef<Promise<string> | null>(null);
   const songId = params.get("songId");
   const difficulty = (params.get("difficulty") ?? "medium") as Difficulty;
 
@@ -27,12 +27,15 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
 
     async function begin() {
       let currentJobId = jobId;
-      if (jobId === "new" && !started.current) {
-        started.current = true;
+      if (jobId === "new") {
         if (!songId) { setError("Choose a song before starting a practice sheet."); return; }
-        const response = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ songId, difficulty }) });
-        if (!response.ok) { setError("This demo song could not be prepared."); return; }
-        currentJobId = (await response.json() as { jobId: string }).jobId;
+        if (!createdJob.current) {
+          createdJob.current = fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ songId, difficulty }) }).then(async (response) => {
+            if (!response.ok) throw new Error("This demo song could not be prepared.");
+            return (await response.json() as { jobId: string }).jobId;
+          });
+        }
+        try { currentJobId = await createdJob.current; } catch (nextError) { setError(nextError instanceof Error ? nextError.message : "This demo song could not be prepared."); return; }
         window.history.replaceState(null, "", `/processing/${currentJobId}`);
       }
 
@@ -58,5 +61,5 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
   const progress = status?.progress ?? 4;
   const isFailed = Boolean(error) || status?.stage === "failed";
 
-  return <main className="flex min-h-screen flex-col px-5 py-7 sm:px-8"><header className="mx-auto flex w-full max-w-5xl items-center justify-between border-b border-border/80 pb-5"><Link href="/" className="flex items-center gap-2 text-sm font-semibold"><span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground"><Music2 className="size-4" /></span>Sheetify</Link><Link href="/" className="text-xs text-muted-foreground hover:text-foreground">Return home</Link></header><section className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center py-20"><div className="mb-8 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">{isFailed ? <AlertCircle className="size-7" /> : status?.stage === "ready" ? <Check className="size-7" /> : <LoaderCircle className="size-7 animate-spin" />}</div><p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{isFailed ? "Something needs attention" : status ? stageLabels[status.stage] : "Starting session"}</p><h1 className="mt-3 font-heading text-4xl tracking-[-0.03em] sm:text-5xl">{status?.song.title ?? "Preparing your practice sheet"}</h1><p className="mt-3 text-muted-foreground">{status ? `${status.song.artist} · ${labels[status.difficulty]}` : "Loading the selected arrangement."}</p><div className="mt-12"><div className="mb-3 flex justify-between text-sm"><span>{error || status?.message || "Setting up the score desk…"}</span><span className="tabular-nums">{progress}%</span></div><Progress value={progress} aria-label="Processing progress" className="h-2" /></div>{isFailed && <div className="mt-8 flex gap-3"><Button render={<Link href="/" />}>Return home</Button><Button variant="outline" onClick={() => window.location.reload()}>Try again</Button></div>}<div className="mt-12 grid grid-cols-3 gap-2 text-center text-xs text-muted-foreground"><span className={progress >= 34 ? "text-primary" : ""}>Listen</span><span className={progress >= 66 ? "text-primary" : ""}>Arrange</span><span className={progress >= 88 ? "text-primary" : ""}>Engrave</span></div></section></main>;
+  return <main className="flex min-h-screen flex-col px-5 py-7 sm:px-8"><header className="mx-auto flex w-full max-w-5xl items-center justify-between border-b border-border/80 pb-5"><Link href="/" className="flex items-center gap-2 text-sm font-semibold"><span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground"><Music2 className="size-4" /></span>Sheetify</Link><Link href="/" className="text-xs text-muted-foreground hover:text-foreground">Return home</Link></header><section className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center py-20"><div className="mb-8 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">{isFailed ? <AlertCircle className="size-7" /> : status?.stage === "ready" ? <Check className="size-7" /> : <LoaderCircle className="size-7 animate-spin" />}</div><p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{isFailed ? "Something needs attention" : status ? stageLabels[status.stage] : "Starting session"}</p><h1 className="mt-3 font-heading text-4xl tracking-[-0.03em] sm:text-5xl">{status?.song.title ?? "Preparing your practice sheet"}</h1><p className="mt-3 text-muted-foreground">{status ? `${status.song.artist} · ${labels[status.difficulty]}` : "Loading the selected arrangement."}</p><div className="mt-12"><div className="mb-3 flex justify-between text-sm"><span>{error || status?.message || "Setting up the score desk…"}</span><span className="tabular-nums">{progress}%</span></div><Progress value={progress} aria-label="Processing progress" className="h-2" /></div>{isFailed && <div className="mt-8 flex gap-3"><Button nativeButton={false} render={<Link href="/" />}>Return home</Button><Button variant="outline" onClick={() => window.location.reload()}>Try again</Button></div>}<div className="mt-12 grid grid-cols-3 gap-2 text-center text-xs text-muted-foreground"><span className={progress >= 34 ? "text-primary" : ""}>Listen</span><span className={progress >= 66 ? "text-primary" : ""}>Arrange</span><span className={progress >= 88 ? "text-primary" : ""}>Engrave</span></div></section></main>;
 }
