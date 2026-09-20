@@ -1,11 +1,12 @@
 import { createDemoSheet, findDemoSong } from "@/lib/demo-data";
 import { createHostedProcessingPipeline } from "@/lib/processing-pipeline";
-import type { Difficulty, JobStatus, Song } from "@/lib/types";
+import type { Difficulty, JobStatus, SheetPackage, Song } from "@/lib/types";
 
 const registeredSongs = new Map<string, Song>();
 const retryCounts = new Map<string, number>();
 const runtimeStatuses = new Map<string, JobStatus>();
 const runtimeSheets = new Map<string, Awaited<ReturnType<typeof createDemoSheet>>>();
+const hostedSheetCache = new Map<string, SheetPackage>();
 export const MAX_JOB_RETRIES = 3;
 const stages: Array<{ name: JobStatus["stage"]; start: number; end: number; message: string }> = [
   { name: "queued", start: 0, end: 8, message: "Your practice sheet is in line." },
@@ -63,14 +64,17 @@ export async function startHostedJob(jobId: string, options: { endpoint?: string
   runtimeStatuses.set(jobId, { ...base, stage: "transcribing", progress: 45, message: "Listening for melody, rhythm, and harmony." });
 
   try {
-    const result = await createHostedProcessingPipeline(options)({
+    const processingRequest = {
       song,
       difficulty: typedDifficulty,
       tempo: tempoForDifficulty(typedDifficulty),
       transcriptionModel: process.env.BASIC_PITCH_MODEL ?? "basic-pitch",
+    };
+    const result = await createHostedProcessingPipeline(options)({
+      ...processingRequest,
       cache: {
-        get: async () => null,
-        set: async () => undefined,
+        get: async (key) => hostedSheetCache.get(key) ?? null,
+        set: async (key, sheet) => { hostedSheetCache.set(key, sheet); },
       },
     });
     const sheetId = `sheet-${jobId}`;
