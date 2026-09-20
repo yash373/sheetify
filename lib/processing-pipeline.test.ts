@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { LicensingError, processLicensedSong, processingCacheKey } from "@/lib/processing-pipeline";
+import { createHostedProcessingPipeline, LicensingError, processLicensedSong, processingCacheKey } from "@/lib/processing-pipeline";
 import type { SheetPackage, Song } from "@/lib/types";
 
 const song: Song = {
@@ -83,5 +83,22 @@ describe("licensed processing pipeline", () => {
       cache,
     })).rejects.toThrow("provider unavailable");
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("composes the licensed downloader and hosted transcriber", async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "audio/mpeg" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "basic-pitch-v1", notes: [{ start_time_s: 0, end_time_s: 1, pitch_midi: 60, velocity: 0.8 }] }), { status: 200 }));
+    const cache = createCache();
+    const result = await createHostedProcessingPipeline({ endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl })({
+      song,
+      difficulty: "beginner",
+      tempo: 60,
+      transcriptionModel: "basic-pitch-v1",
+      cache,
+    });
+
+    expect(result.sheet.noteEvents[0]).toMatchObject({ pitch: "C4", duration: 1 });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });
