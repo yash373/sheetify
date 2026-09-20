@@ -1,3 +1,4 @@
+import { neon } from "@neondatabase/serverless";
 import type { Difficulty, JobStage, JobStatus, SheetPackage, Song } from "@/lib/types";
 
 export const JOB_TTL_MS = 30 * 60 * 1000;
@@ -153,9 +154,16 @@ function rowToSheet(row: Record<string, unknown>): SheetRecord {
 
 let defaultStore: DurableStore | undefined;
 export function getDurableStore() {
-  // The executor is deliberately injected by the deployment adapter. Without
-  // it, local development remains deterministic and credential-free.
-  return defaultStore ??= new MemoryDurableStore();
+  if (defaultStore) return defaultStore;
+  const connectionString = process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (connectionString) {
+    const sql = neon(connectionString);
+    defaultStore = new NeonDurableStore((query, params) => sql.query(query, [...params]));
+  } else {
+    // Local development and tests remain deterministic and credential-free.
+    defaultStore = new MemoryDurableStore();
+  }
+  return defaultStore;
 }
 export function setDurableStore(store: DurableStore) { defaultStore = store; }
 

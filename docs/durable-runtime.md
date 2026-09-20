@@ -1,6 +1,6 @@
 # Durable job runtime
 
-The API persists job and hosted-sheet state through `DurableStore`. Local development and tests use `MemoryDurableStore`; this mode needs no credentials and never calls an external service. A deployment injects `NeonDurableStore` with a parameterized Neon/Postgres executor and applies `db/migrations/001_durable_runtime.sql`.
+The API persists job and hosted-sheet state through `DurableStore`. Local development and tests use `MemoryDurableStore`; this mode needs no credentials and never calls an external service. When `NEON_DATABASE_URL` or `DATABASE_URL` is present, the runtime automatically uses `NeonDurableStore` through the official Neon serverless driver. Apply `db/migrations/001_durable_runtime.sql` before deployment.
 
 Required hosted-processing configuration:
 
