@@ -25,33 +25,33 @@ describe("job catalog handoff", () => {
     expect(isProcessableSong({ ...licensedSong, source: { ...licensedSong.source, downloadAllowed: false } })).toBe(false);
   });
 
-  it("keeps the selected provider-neutral song through processing and sheet creation", () => {
-    const jobId = createJob(licensedSong.id, "medium", licensedSong);
-    expect(jobId).toBeTruthy();
-    expect(getJob(jobId!)).toMatchObject({ song: licensedSong, difficulty: "medium" });
-    expect(getSheet(`sheet-${jobId}`)).toMatchObject({ song: licensedSong, difficulty: "medium" });
+  it("keeps the selected provider-neutral song through processing and sheet creation", async () => {
+    const created = await createJob(licensedSong.id, "medium", licensedSong);
+    expect(created).toBeTruthy();
+    expect(await getJob(created!.jobId)).toMatchObject({ song: licensedSong, difficulty: "medium" });
   });
 
-  it("creates bounded retry jobs with retry metadata", () => {
-    const jobId = createJob("retry-song", "beginner", { ...licensedSong, id: "retry-song" });
-    expect(getJob(jobId!)).toMatchObject({ retryCount: 0, maxRetries: MAX_JOB_RETRIES });
-    const retryId = retryJob(jobId!);
-    expect(getJob(retryId!)).toMatchObject({ retryCount: 1, maxRetries: MAX_JOB_RETRIES });
+  it("creates bounded retry jobs with retry metadata", async () => {
+    const created = await createJob("retry-song", "beginner", { ...licensedSong, id: "retry-song" });
+    expect(await getJob(created!.jobId)).toMatchObject({ retryCount: 0, maxRetries: MAX_JOB_RETRIES });
+    const retried = await retryJob(created!.jobId, created!.accessToken);
+    expect(await getJob(retried!.jobId)).toMatchObject({ retryCount: 1, maxRetries: MAX_JOB_RETRIES });
   });
 
   it("uses the hosted pipeline for licensed jobs instead of demo output", async () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "audio/mpeg" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ model: "basic-pitch-v1", notes: [{ start_time_s: 0, end_time_s: 1, pitch_midi: 60, velocity: 0.8 }] }), { status: 200 }));
-    const jobId = createJob("hosted-song", "medium", { ...licensedSong, id: "hosted-song" });
-    expect(await startHostedJob(jobId!, { endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl })).toBe(true);
-    expect(getJob(jobId!)).toMatchObject({ stage: "ready", sheetId: `sheet-${jobId}` });
-    expect(getSheet(`sheet-${jobId}`)?.musicXml).toContain("<step>C</step>");
+    const created = await createJob("hosted-song", "medium", { ...licensedSong, id: "hosted-song" });
+    expect(await startHostedJob(created!.jobId, { endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl })).toBe(true);
+    const status = await getJob(created!.jobId);
+    expect(status).toMatchObject({ stage: "ready" });
+    expect(await getSheet(status!.sheetId!, created!.accessToken)).toMatchObject({ musicXml: expect.stringContaining("<step>C</step>") });
 
-    const cachedJobId = createJob("hosted-song-cached", "medium", { ...licensedSong, id: "hosted-song-cached" });
+    const cachedJob = await createJob("hosted-song", "medium", { ...licensedSong, id: "hosted-song" });
     const shouldNotDownload = vi.fn<typeof fetch>();
-    expect(await startHostedJob(cachedJobId!, { endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl: shouldNotDownload })).toBe(true);
-    expect(getJob(cachedJobId!)).toMatchObject({ stage: "ready", message: "Your cached practice sheet is ready." });
+    expect(await startHostedJob(cachedJob!.jobId, { endpoint: "https://transcriber.example.test/predict", token: "token", fetchImpl: shouldNotDownload })).toBe(true);
+    expect(await getJob(cachedJob!.jobId)).toMatchObject({ stage: "ready", message: "Your cached practice sheet is ready." });
     expect(shouldNotDownload).not.toHaveBeenCalled();
   });
 });
