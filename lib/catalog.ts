@@ -1,5 +1,6 @@
-import { demoSongs, searchDemoSongs } from "@/lib/demo-data";
+import { searchDemoSongs } from "@/lib/demo-data";
 import type { Song, TrackLicense } from "@/lib/types";
+import catalogIndex from "@/lib/catalog-index.json";
 
 export type JamendoTrack = {
   id: string;
@@ -15,9 +16,20 @@ export type JamendoTrack = {
 type JamendoResponse = { results?: JamendoTrack[] };
 
 export type CatalogProvider = {
-  readonly id: "jamendo";
+  readonly id: "jamendo" | "imslp";
   search(query: string): Promise<Song[]>;
 };
+
+type CatalogIndexEntry = {
+  id: string;
+  title: string;
+  artist: string;
+  catalogUrl: string;
+  genre: string;
+};
+
+const IMSLP_LICENSE_URL = "https://imslp.org/wiki/IMSLP:Copyright_Made_Easy";
+const IMSLP_METADATA_VERIFIED_AT = "2026-09-20T00:00:00.000Z";
 
 const JAMENDO_API = "https://api.jamendo.com/v3.0/tracks/";
 const JAMENDO_CATALOG = "https://www.jamendo.com/track";
@@ -59,11 +71,64 @@ export function createJamendoProvider(clientId = process.env.JAMENDO_CLIENT_ID):
   return { id: "jamendo", search: (query) => searchJamendoSongs(query, clientId) };
 }
 
-export const catalogProviders = { jamendo: createJamendoProvider() } satisfies Partial<Record<CatalogProvider["id"], CatalogProvider | null>>;
+function mapImslpEntry(entry: CatalogIndexEntry): Song {
+  const title = entry.title.trim();
+  const artist = entry.artist.trim();
+  return {
+    id: entry.id,
+    title,
+    artist,
+    durationSeconds: 0,
+    genre: entry.genre,
+    source: {
+      provider: "imslp",
+      trackId: entry.id,
+      catalogUrl: entry.catalogUrl,
+      durationSeconds: 0,
+      downloadAllowed: false,
+      metadataVerifiedAt: IMSLP_METADATA_VERIFIED_AT,
+      license: {
+        name: "IMSLP catalog metadata",
+        url: IMSLP_LICENSE_URL,
+        attributionRequired: true,
+        attributionText: `${title} by ${artist} — catalog metadata from IMSLP`,
+        commercialUse: "unknown",
+        derivatives: "unknown",
+      },
+    },
+    processingEstimateSeconds: 90,
+  };
+}
+
+function searchImslpSongs(query: string): Song[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  const entries = catalogIndex as CatalogIndexEntry[];
+  const matches = normalized
+    ? entries.filter((entry) => `${entry.title} ${entry.artist}`.toLocaleLowerCase().includes(normalized))
+    : entries;
+  return matches.slice(0, 20).map(mapImslpEntry);
+}
+
+export const catalogProviders = {
+  jamendo: createJamendoProvider(),
+  imslp: { id: "imslp", search: async (query: string) => searchImslpSongs(query) },
+} satisfies Partial<Record<CatalogProvider["id"], CatalogProvider | null>>;
 
 export async function searchCatalogSongs(query: string) {
   const provider = catalogProviders.jamendo;
-  if (!provider) return { provider: "demo" as const, songs: searchDemoSongs(query) };
-  try { return { provider: provider.id, songs: await provider.search(query) }; }
-  catch { return { provider: "demo" as const, songs: query.trim() ? [] : demoSongs }; }
+  if (provider) {
+    try {
+      const songs = await provider.search(query);
+      if (songs.length > 0) return { provider: provider.id, songs };
+    } catch {
+      // The open metadata catalog remains available when a licensed provider is down.
+    }
+  }
+  const demoMatches = searchDemoSongs(query);
+  if (demoMatches.length > 0) return { provider: "demo" as const, songs: demoMatches };
+  const metadataSongs = await catalogProviders.imslp?.search(query);
+  if (metadataSongs && metadataSongs.length > 0) return { provider: "imslp" as const, songs: metadataSongs };
+  return { provider: "demo" as const, songs: [] };
 }
+
+export const searchableCatalogSize = (catalogIndex as CatalogIndexEntry[]).length;

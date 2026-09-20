@@ -56,4 +56,13 @@ describe("catalog licensing boundary", () => {
     expect(result.provider).toBe("demo");
     expect(result.songs.map((song) => song.id)).toEqual(["moonlit-keys"]);
   });
+
+  it("falls back to the searchable metadata catalog for unmatched titles", async () => {
+    vi.stubEnv("JAMENDO_CLIENT_ID", "");
+    const result = await searchCatalogSongs("Bach");
+    expect(result.provider).toBe("imslp");
+    expect(result.songs.length).toBeGreaterThan(0);
+    expect(result.songs.every((song) => song.source.provider === "imslp")).toBe(true);
+    expect(result.songs.every((song) => !song.source.downloadAllowed)).toBe(true);
+  });
 });
