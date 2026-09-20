@@ -2,6 +2,8 @@ import { createDemoSheet, findDemoSong } from "@/lib/demo-data";
 import type { Difficulty, JobStatus, Song } from "@/lib/types";
 
 const registeredSongs = new Map<string, Song>();
+const retryCounts = new Map<string, number>();
+export const MAX_JOB_RETRIES = 3;
 const stages: Array<{ name: JobStatus["stage"]; start: number; end: number; message: string }> = [
   { name: "queued", start: 0, end: 8, message: "Your practice sheet is in line." },
   { name: "preparing", start: 8, end: 18, message: "Preparing the arrangement request." },
@@ -37,7 +39,20 @@ export function createJob(songId: string, difficulty: Difficulty, suppliedSong?:
 
   const jobId = `${songId}--${difficulty}--${Date.now().toString(36)}`;
   registeredSongs.set(jobId, candidate);
+  retryCounts.set(jobId, 0);
   return jobId;
+}
+
+export function retryJob(jobId: string) {
+  const [songId, difficulty] = jobId.split("--");
+  const song = registeredSongs.get(jobId) ?? findDemoSong(songId ?? "");
+  if (!song || !["beginner", "medium", "hard"].includes(difficulty ?? "")) return null;
+  const retryCount = retryCounts.get(jobId) ?? 0;
+  if (retryCount >= MAX_JOB_RETRIES) return null;
+  const nextJobId = `${song.id}--${difficulty}--${Date.now().toString(36)}`;
+  registeredSongs.set(nextJobId, song);
+  retryCounts.set(nextJobId, retryCount + 1);
+  return nextJobId;
 }
 
 export function getJob(jobId: string): JobStatus | null {
@@ -51,11 +66,11 @@ export function getJob(jobId: string): JobStatus | null {
   const elapsed = Date.now() - createdAt;
   const progress = Math.min(100, Math.floor(elapsed / 85));
   if (progress >= 100) {
-    return { jobId, song, difficulty: typedDifficulty, stage: "ready", progress: 100, message: "Your practice sheet is ready.", sheetId: `sheet-${jobId}` };
+    return { jobId, song, difficulty: typedDifficulty, retryCount: retryCounts.get(jobId) ?? 0, maxRetries: MAX_JOB_RETRIES, stage: "ready", progress: 100, message: "Your practice sheet is ready.", sheetId: `sheet-${jobId}` };
   }
 
   const current = stages.find((stage) => progress >= stage.start && progress < stage.end) ?? stages[0];
-  return { jobId, song, difficulty: typedDifficulty, stage: current.name, progress, message: current.message };
+  return { jobId, song, difficulty: typedDifficulty, retryCount: retryCounts.get(jobId) ?? 0, maxRetries: MAX_JOB_RETRIES, stage: current.name, progress, message: current.message };
 }
 
 export function getSheet(sheetId: string) {

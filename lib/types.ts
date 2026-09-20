@@ -48,6 +48,8 @@ export type JobStatus = {
   jobId: string;
   song: Song;
   difficulty: Difficulty;
+  retryCount: number;
+  maxRetries: number;
   stage: JobStage;
   progress: number;
   message: string;
