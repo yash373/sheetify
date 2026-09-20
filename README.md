@@ -18,6 +18,19 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+### Hosted transcription configuration
+
+Licensed songs use a self-controlled Hugging Face ZeroGPU Space through the server-side Basic Pitch adapter. Set these variables in the server environment; do not prefix them with `NEXT_PUBLIC_`:
+
+```text
+BASIC_PITCH_ENDPOINT=https://<owner>-<space>.hf.space
+BASIC_PITCH_TOKEN=<server-only Hugging Face token>
+BASIC_PITCH_API_NAME=predict
+BASIC_PITCH_MODEL=basic-pitch
+```
+
+The endpoint is the Space base URL. Sheetify uploads audio in memory, submits the Gradio queue, polls its SSE result, and retains only normalized note events. A deployed Space, valid token, ZeroGPU quota, and provider behavior still require live validation; tests use mocked fetch responses and do not establish those external gates.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
