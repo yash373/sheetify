@@ -1,3 +1,5 @@
+import { isRetryableProviderFailure, withRetries } from "@/lib/retry";
+
 export type AudioArtifact = {
   bytes: Uint8Array;
   contentType: string;
@@ -112,11 +114,14 @@ export function createHostedBasicPitchAdapter(options: HostedBasicPitchOptions =
         audio.bytes.byteOffset + audio.bytes.byteLength,
       ) as ArrayBuffer;
       form.append("audio", new Blob([audioBuffer], { type: audio.contentType }), audio.filename);
-      const response = await fetchImpl(endpoint, {
-        method: "POST",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), Accept: "application/json" },
-        body: form,
-      });
+      const response = await withRetries(
+        () => fetchImpl(endpoint, {
+          method: "POST",
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), Accept: "application/json" },
+          body: form,
+        }),
+        { shouldRetry: isRetryableProviderFailure },
+      );
 
       if (!response.ok) {
         throw new TranscriptionProviderError(`Basic Pitch request failed with status ${response.status}.`);

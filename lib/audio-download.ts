@@ -1,5 +1,6 @@
 import type { AudioArtifact } from "@/lib/transcription";
 import type { TrackSource } from "@/lib/types";
+import { isRetryableProviderFailure, withRetries } from "@/lib/retry";
 
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
@@ -37,7 +38,7 @@ export function createLicensedAudioDownloader(options: AudioDownloadOptions = {}
       }
       if (url.protocol !== "https:") throw new AudioDownloadError("Licensed audio must be downloaded over HTTPS.");
 
-      const response = await fetchImpl(url, { redirect: "error" });
+      const response = await withRetries(() => fetchImpl(url, { redirect: "error" }), { shouldRetry: isRetryableProviderFailure });
       if (!response.ok) throw new AudioDownloadError(`Licensed audio request failed with status ${response.status}.`);
 
       const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim() ?? "application/octet-stream";
