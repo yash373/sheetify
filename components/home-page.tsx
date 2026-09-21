@@ -47,8 +47,11 @@ export function HomePage() {
   const [catalogError, setCatalogError] = useState("");
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setCachedSheets(readAllCachedSheets()));
-    return () => window.cancelAnimationFrame(frame);
+    let active = true;
+    const refresh = () => void readAllCachedSheets().then((entries) => { if (active) setCachedSheets(entries); }).catch(() => { if (active) setCachedSheets([]); });
+    const frame = window.requestAnimationFrame(refresh);
+    window.addEventListener("sheetify-cache-change", refresh);
+    return () => { active = false; window.cancelAnimationFrame(frame); window.removeEventListener("sheetify-cache-change", refresh); };
   }, []);
   const [isSearching, setIsSearching] = useState(false);
 
@@ -68,8 +71,8 @@ export function HomePage() {
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [query]);
 
-  function deleteCachedSheet(sheet: CacheEntry) {
-    removeCache(sheet.song.id, sheet.difficulty);
+  async function deleteCachedSheet(sheet: CacheEntry) {
+    await removeCache(sheet.song.id, sheet.difficulty);
     setCachedSheets((current) => current.filter((entry) => entry.sheetId !== sheet.sheetId));
   }
 
@@ -108,9 +111,10 @@ export function HomePage() {
       };
       const sheet = createLocalSheet(song, transcription);
       setUploadProgress(100);
-      writeCache(sheet);
+      await writeCache(sheet);
       router.push(`/practice/${sheet.sheetId}`);
     } catch (error) {
+      if (process.env.NODE_ENV !== "production") console.error("Sheet persistence failed", error);
       setUploadError(error instanceof Error ? error.message : "This audio could not be transcribed.");
       setUploadProgress(null);
     } finally {
@@ -134,9 +138,10 @@ export function HomePage() {
       const transcription = await transcribeAudioFile(file, setUploadProgress);
       const sheet = createLocalSheet(song, transcription);
       setUploadProgress(100);
-      writeCache(sheet);
+      await writeCache(sheet);
       router.push(`/practice/${sheet.sheetId}`);
     } catch (error) {
+      if (process.env.NODE_ENV !== "production") console.error("Catalog sheet persistence failed", error);
       setCatalogError(error instanceof Error ? error.message : "This authorized audio could not be transcribed.");
       setUploadProgress(null);
     }
