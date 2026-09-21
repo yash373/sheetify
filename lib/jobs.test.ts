@@ -28,6 +28,21 @@ describe("job catalog handoff", () => {
     expect(isProcessableSong({ ...licensedSong, source: { ...licensedSong.source, downloadAllowed: false } })).toBe(false);
   });
 
+  it("rejects metadata-only catalog entries before a job is created", () => {
+    expect(isProcessableSong({
+      ...licensedSong,
+      id: "openopus-9172",
+      source: {
+        ...licensedSong.source,
+        provider: "openopus",
+        trackId: "openopus-9172",
+        catalogUrl: "https://api.openopus.org/work/detail/9172.json",
+        downloadUrl: undefined,
+        downloadAllowed: false,
+      },
+    })).toBe(false);
+  });
+
   it("keeps the selected provider-neutral song through processing and sheet creation", async () => {
     const created = await createJob(licensedSong.id, "medium", licensedSong);
     expect(created).toBeTruthy();
