@@ -75,10 +75,10 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
       });
     }
     void createdJob.current
-      .then((created) => {
+      .then(async (created) => {
         accessToken.current = created.accessToken ?? "";
         if (created.sheet) {
-          writeCache(created.sheet);
+          await writeCache(created.sheet);
           setStatus({
             jobId: created.jobId,
             song: created.sheet.song,
@@ -95,13 +95,10 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
         }
         setActiveJobId(created.jobId);
       })
-      .catch((nextError: unknown) =>
-        setError(
-          nextError instanceof Error
-            ? nextError.message
-            : "This demo song could not be prepared.",
-        ),
-      );
+      .catch((nextError: unknown) => {
+        if (process.env.NODE_ENV !== "production") console.error("Processing persistence failed", nextError);
+        setError(nextError instanceof Error ? nextError.message : "This demo song could not be prepared.");
+      });
   }, [difficulty, jobId, router, songId, songPayload]);
 
   useEffect(() => {
@@ -125,9 +122,19 @@ export function ProcessingPage({ jobId }: { jobId: string }) {
       if (!active) return;
       setStatus(nextStatus);
       if (nextStatus.stage === "ready" && nextStatus.sheetId) {
-        window.setTimeout(() => {
-          router.push(`/practice/${nextStatus.sheetId}`);
-        }, 500);
+        const sheetResponse = await fetch(`/api/sheets/${nextStatus.sheetId}`, { cache: "no-store", headers });
+        if (!sheetResponse.ok) {
+          setError("The practice sheet was ready, but could not be loaded for local saving. Try again.");
+          return;
+        }
+        try {
+          const sheet = (await sheetResponse.json()) as SheetPackage;
+          await writeCache(sheet);
+          window.setTimeout(() => router.push(`/practice/${nextStatus.sheetId}`), 500);
+        } catch (nextError) {
+          if (process.env.NODE_ENV !== "production") console.error("Hosted sheet persistence failed", nextError);
+          setError(nextError instanceof Error ? nextError.message : "The practice sheet could not be saved.");
+        }
         return;
       }
       timer = window.setTimeout(() => void poll(), 260);

@@ -34,6 +34,14 @@ The endpoint is the Space base URL. Sheetify uploads audio in memory, submits th
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+### Local sheets and supported audio
+
+Uploaded audio is processed in the browser and is not uploaded by the local MVP. MP3, WAV, OGG, and FLAC inputs are limited to 25 MB and 3 minutes. Generated MusicXML, note events, and sheet metadata are stored in the versioned `sheetify-sheets` IndexedDB database on the current device for 30 days; this supports large arrangements beyond localStorage limits and survives navigation and refresh. Existing valid localStorage sheets are migrated once.
+
+The catalog UI distinguishes authorized downloadable audio from metadata-only sources. A metadata result cannot enter transcription, and a provider is not treated as operational merely because an environment variable exists. Hosted catalog transcription remains server-controlled through `BASIC_PITCH_ENDPOINT` and a server-only token.
+
+If browser storage is unavailable or a saved sheet cannot be verified, Sheetify stays on the current screen and offers a recoverable error instead of opening a broken practice URL. Practice mode reads local IndexedDB first and falls back to the protected server sheet route when a local copy is unavailable.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

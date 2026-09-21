@@ -20,7 +20,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { ScoreRenderer } from "@/components/score-renderer";
-import { readAllCachedSheets, writeCache } from "@/lib/cache";
+import { getSheet, writeCache } from "@/lib/cache";
 import {
   noteIndexAtBeat,
   noteIndicesCrossed,
@@ -43,6 +43,8 @@ type InstrumentPreset = (typeof instrumentPresets)[number]["value"];
 export function PracticePage({ sheetId }: { sheetId: string }) {
   const [sheet, setSheet] = useState<SheetPackage | null>(null);
   const [error, setError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [tempo, setTempo] = useState(92);
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -83,34 +85,45 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
 
   useEffect(() => {
     let active = true;
-    let cachedFrame: number | undefined;
-    const cachedSheet = readAllCachedSheets().find((entry) => entry.sheetId === sheetId);
-    if (cachedSheet) {
-      cachedFrame = window.requestAnimationFrame(() => {
-        if (!active) return;
-        setSheet(cachedSheet);
-        setTempo(cachedSheet.tempo);
-      });
-    }
-    fetch(`/api/sheets/${sheetId}`, { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Practice sheet not found.");
-        return (await response.json()) as SheetPackage;
-      })
-      .then((nextSheet) => {
+    async function load() {
+      try {
+        const cachedSheet = await getSheet(sheetId);
+        if (cachedSheet) {
+          if (!active) return;
+          setSheet(cachedSheet);
+          setTempo(cachedSheet.tempo);
+          return;
+        }
+      } catch (storageError) {
+        if (process.env.NODE_ENV !== "production") console.error("Local sheet read failed", storageError);
+      }
+      try {
+        const response = await fetch(`/api/sheets/${sheetId}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(response.status === 401 || response.status === 404 ? "This practice session has expired or the sheet was not saved." : "The practice sheet could not be loaded.");
+        const nextSheet = (await response.json()) as SheetPackage;
+        await writeCache(nextSheet);
         if (!active) return;
         setSheet(nextSheet);
         setTempo(nextSheet.tempo);
-        writeCache(nextSheet);
-      })
-      .catch((nextError: Error) => {
-        if (active && !cachedSheet) setError(nextError.message);
-      });
+      } catch (nextError) {
+        if (!active) return;
+        if (process.env.NODE_ENV !== "production") console.error("Practice sheet load failed", nextError);
+        setError(nextError instanceof Error ? nextError.message : "The practice sheet could not be loaded.");
+      }
+    }
+    void load();
     return () => {
       active = false;
-      if (cachedFrame) window.cancelAnimationFrame(cachedFrame);
     };
-  }, [sheetId]);
+  }, [sheetId, loadAttempt]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setHelpOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const duration = useMemo(
     () =>
@@ -277,9 +290,10 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
           <p className="mt-3 text-muted-foreground">
             {error} This demo session may have expired.
           </p>
-          <Link className={`${buttonVariants()} mt-7`} href="/">
-            Return home
-          </Link>
+          <div className="mt-7 flex justify-center gap-3">
+            <Link className={buttonVariants()} href="/">Return home</Link>
+            <Button variant="outline" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry loading</Button>
+          </div>
         </div>
       </main>
     );
@@ -334,11 +348,21 @@ export function PracticePage({ sheetId }: { sheetId: string }) {
               size="icon"
               aria-label="Practice help"
               className="text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-expanded={helpOpen}
+              onClick={() => setHelpOpen((open) => !open)}
             >
               <CircleHelp className="size-4" />
             </Button>
           </div>
         </div>
+        {helpOpen && (
+          <aside role="dialog" aria-label="Practice help" className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="font-medium text-foreground">Practice controls</p><p className="mt-1">Play and pause with the main button or Space. Use tempo, count-in, metronome, instrument, loop, and measure controls to shape the session. Drag the progress slider to jump through the score.</p></div>
+              <Button variant="ghost" size="sm" onClick={() => setHelpOpen(false)}>Close</Button>
+            </div>
+          </aside>
+        )}
       </header>
       <section className="mx-auto max-w-[1500px] px-4 py-5 sm:px-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-md border border-border bg-card px-4 py-3">
