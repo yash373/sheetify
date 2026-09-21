@@ -44,6 +44,7 @@ export function HomePage() {
   const [cachedSheets, setCachedSheets] = useState<CacheEntry[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState("");
+  const [catalogError, setCatalogError] = useState("");
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setCachedSheets(readAllCachedSheets()));
@@ -105,14 +106,7 @@ export function HomePage() {
         },
         processingEstimateSeconds: 90,
       };
-      const tempo = selectedDifficulty === "beginner" ? 76 : selectedDifficulty === "medium" ? 92 : 108;
-      const sheet = createSheetFromTranscription({
-        song,
-        difficulty: selectedDifficulty,
-        tempo,
-        transcription,
-        sheetId: `sheet-${crypto.randomUUID()}`,
-      });
+      const sheet = createLocalSheet(song, transcription);
       setUploadProgress(100);
       writeCache(sheet);
       router.push(`/practice/${sheet.sheetId}`);
@@ -122,6 +116,35 @@ export function HomePage() {
     } finally {
       if (uploadInput.current) uploadInput.current.value = "";
     }
+  }
+
+  async function processAuthorizedSong(song: Song) {
+    if (!song.source.downloadAllowed || !song.source.downloadUrl) return;
+    setCatalogError("");
+    setUploadProgress(1);
+    try {
+      const response = await fetch(song.source.downloadUrl, { mode: "cors" });
+      if (!response.ok) throw new Error(`The authorized audio could not be fetched (${response.status}).`);
+      const contentLength = Number(response.headers.get("content-length"));
+      if (Number.isFinite(contentLength) && contentLength > 25 * 1024 * 1024) throw new Error("The authorized audio exceeds the 25 MB limit.");
+      const blob = await response.blob();
+      if (blob.size > 25 * 1024 * 1024) throw new Error("The authorized audio exceeds the 25 MB limit.");
+      const file = new File([blob], `${song.title}.mp3`, { type: blob.type || "audio/mpeg" });
+      const { transcribeAudioFile } = await import("@/lib/browser-basic-pitch");
+      const transcription = await transcribeAudioFile(file, setUploadProgress);
+      const sheet = createLocalSheet(song, transcription);
+      setUploadProgress(100);
+      writeCache(sheet);
+      router.push(`/practice/${sheet.sheetId}`);
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : "This authorized audio could not be transcribed.");
+      setUploadProgress(null);
+    }
+  }
+
+  function createLocalSheet(song: Song, transcription: Parameters<typeof createSheetFromTranscription>[0]["transcription"]) {
+    const tempo = selectedDifficulty === "beginner" ? 76 : selectedDifficulty === "medium" ? 92 : 108;
+    return createSheetFromTranscription({ song, difficulty: selectedDifficulty, tempo, transcription, sheetId: `sheet-${crypto.randomUUID()}` });
   }
 
   return (
@@ -157,10 +180,11 @@ export function HomePage() {
                     <a href={song.source.catalogUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Source</a>
                   </span>
                 </span>
-                {song.source.downloadAllowed || song.source.provider === "demo" ? <Link href={songHref(song, selectedDifficulty)} className="text-xs text-muted-foreground transition-transform hover:text-foreground group-hover:translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Open →</Link> : <span className="text-right text-[11px] text-muted-foreground">Metadata only<br />Use your own audio</span>}
-              </div>
+                {song.source.downloadAllowed ? <Button type="button" variant="ghost" size="sm" disabled={uploadProgress !== null} onClick={() => void processAuthorizedSong(song)}>Transcribe here →</Button> : song.source.provider === "demo" ? <Link href={songHref(song, selectedDifficulty)} className="text-xs text-muted-foreground transition-transform hover:text-foreground group-hover:translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Open →</Link> : <span className="text-right text-[11px] text-muted-foreground">Metadata only<br />Use your own audio</span>}
+            </div>
             ))}
             {!isSearching && query && songs.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">No songs found. Try another title or artist.</p>}
+            {catalogError && <p className="px-4 py-3 text-sm text-destructive" role="alert">{catalogError}</p>}
           </div>
 
           <div className="mt-6 rounded-xl border border-dashed border-border bg-card/50 p-4">
