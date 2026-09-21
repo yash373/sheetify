@@ -16,7 +16,7 @@ export type JamendoTrack = {
 type JamendoResponse = { results?: JamendoTrack[] };
 
 export type CatalogProvider = {
-  readonly id: "jamendo" | "imslp";
+  readonly id: "jamendo" | "internetarchive" | "imslp";
   search(query: string): Promise<Song[]>;
 };
 
@@ -34,6 +34,9 @@ const IMSLP_METADATA_VERIFIED_AT = "2026-09-20T00:00:00.000Z";
 
 const JAMENDO_API = "https://api.jamendo.com/v3.0/tracks/";
 const JAMENDO_CATALOG = "https://www.jamendo.com/track";
+const INTERNET_ARCHIVE_SEARCH = "https://archive.org/advancedsearch.php";
+const INTERNET_ARCHIVE_METADATA = "https://archive.org/metadata";
+const INTERNET_ARCHIVE_DOWNLOAD = "https://archive.org/download";
 
 function licenseMetadata(url: string | undefined, title: string, artist: string): TrackLicense {
   const normalized = url?.toLowerCase() ?? "";
@@ -65,6 +68,89 @@ async function searchJamendoSongs(query: string, clientId: string): Promise<Song
   const body = await response.json() as JamendoResponse;
   const verifiedAt = new Date().toISOString();
   return (body.results ?? []).map((track) => mapJamendoTrack(track, verifiedAt)).filter((song) => song.source.downloadAllowed && song.source.downloadUrl);
+}
+
+type InternetArchiveSearchResponse = { response?: { docs?: Array<{ identifier?: string; title?: string; creator?: string; licenseurl?: string }> } };
+type InternetArchiveFile = { name?: string; format?: string; size?: string; length?: string };
+type InternetArchiveMetadataResponse = { metadata?: { identifier?: string; title?: string; creator?: string; licenseurl?: string }; files?: InternetArchiveFile[] };
+
+function isPermissiveArchiveLicense(url: string | undefined) {
+  const normalized = url?.toLowerCase() ?? "";
+  return normalized.includes("creativecommons.org/licenses/publicdomain") || normalized.includes("creativecommons.org/publicdomain");
+}
+
+function archiveLicense(url: string, title: string, artist: string): TrackLicense {
+  return {
+    name: "Public domain / CC0",
+    url,
+    attributionRequired: false,
+    attributionText: `${title} by ${artist} — public-domain or CC0 recording from Internet Archive`,
+    commercialUse: "allowed",
+    derivatives: "allowed",
+  };
+}
+
+function archiveAudioFile(files: InternetArchiveFile[]) {
+  const candidates = files
+    .filter((file) => typeof file.name === "string" && /\.(mp3|ogg|flac|wav)$/i.test(file.name))
+    .map((file) => ({ ...file, sizeBytes: Number(file.size), durationSeconds: Number(file.length) }))
+    .filter((file) => Number.isFinite(file.sizeBytes) && file.sizeBytes > 0 && file.sizeBytes <= 25 * 1024 * 1024 && Number.isFinite(file.durationSeconds) && file.durationSeconds > 0 && file.durationSeconds <= 15 * 60);
+  return candidates.sort((a, b) => {
+    const aMp3 = /\.mp3$/i.test(a.name ?? "") ? 0 : 1;
+    const bMp3 = /\.mp3$/i.test(b.name ?? "") ? 0 : 1;
+    return aMp3 - bMp3 || a.sizeBytes - b.sizeBytes;
+  })[0];
+}
+
+async function searchInternetArchiveSongs(query: string): Promise<Song[]> {
+  const normalized = query.trim();
+  if (!normalized) return [];
+  const params = new URLSearchParams({
+    q: `mediatype:audio AND format:MP3 AND (licenseurl:*publicdomain* OR licenseurl:*creativecommons.org/publicdomain*) AND (title:${normalized} OR creator:${normalized} OR subject:${normalized})`,
+    fl: "identifier,title,creator,licenseurl",
+    rows: "8",
+    page: "1",
+    output: "json",
+  });
+  const searchResponse = await fetch(`${INTERNET_ARCHIVE_SEARCH}?${params.toString()}`, { next: { revalidate: 600 } });
+  if (!searchResponse.ok) throw new Error(`Internet Archive search failed with ${searchResponse.status}.`);
+  const searchBody = await searchResponse.json() as InternetArchiveSearchResponse;
+  const verifiedAt = new Date().toISOString();
+  const songs: Array<Song | null> = await Promise.all((searchBody.response?.docs ?? []).map(async (entry): Promise<Song | null> => {
+    if (!entry.identifier || !isPermissiveArchiveLicense(entry.licenseurl)) return null;
+    const metadataResponse = await fetch(`${INTERNET_ARCHIVE_METADATA}/${encodeURIComponent(entry.identifier)}`, { next: { revalidate: 3600 } });
+    if (!metadataResponse.ok) return null;
+    const metadata = await metadataResponse.json() as InternetArchiveMetadataResponse;
+    const licenseUrl = metadata.metadata?.licenseurl ?? entry.licenseurl;
+    if (!isPermissiveArchiveLicense(licenseUrl)) return null;
+    const audio = archiveAudioFile(metadata.files ?? []);
+    if (!audio?.name) return null;
+    const title = (metadata.metadata?.title ?? entry.title ?? entry.identifier).trim();
+    const artist = (metadata.metadata?.creator ?? entry.creator ?? "Public-domain recording").trim();
+    return {
+      id: `internetarchive-${entry.identifier}`,
+      title,
+      artist,
+      durationSeconds: audio.durationSeconds,
+      genre: "Public-domain piano audio",
+      source: {
+        provider: "internetarchive" as const,
+        trackId: entry.identifier,
+        catalogUrl: `https://archive.org/details/${encodeURIComponent(entry.identifier)}`,
+        downloadUrl: `${INTERNET_ARCHIVE_DOWNLOAD}/${encodeURIComponent(entry.identifier)}/${encodeURIComponent(audio.name)}`,
+        durationSeconds: audio.durationSeconds,
+        downloadAllowed: true,
+        metadataVerifiedAt: verifiedAt,
+        license: archiveLicense(licenseUrl!, title, artist),
+      },
+      processingEstimateSeconds: 90,
+    } satisfies Song;
+  }));
+  return songs.filter((song): song is Song => song !== null);
+}
+
+export function createInternetArchiveProvider(): CatalogProvider {
+  return { id: "internetarchive", search: searchInternetArchiveSongs };
 }
 
 export function createJamendoProvider(clientId = process.env.JAMENDO_CLIENT_ID): CatalogProvider | null {
@@ -114,6 +200,7 @@ function searchImslpSongs(query: string): Song[] {
 
 export const catalogProviders = {
   jamendo: createJamendoProvider(),
+  internetarchive: createInternetArchiveProvider(),
   imslp: { id: "imslp", search: async (query: string) => searchImslpSongs(query) },
 } satisfies Partial<Record<CatalogProvider["id"], CatalogProvider | null>>;
 
@@ -125,6 +212,15 @@ export async function searchCatalogSongs(query: string) {
       if (songs.length > 0) return { provider: provider.id, songs };
     } catch {
       // The open metadata catalog remains available when a licensed provider is down.
+    }
+  }
+  const archiveProvider = catalogProviders.internetarchive;
+  if (archiveProvider) {
+    try {
+      const songs = await archiveProvider.search(query);
+      if (songs.length > 0) return { provider: archiveProvider.id, songs };
+    } catch {
+      // Metadata search remains available when the public archive is unavailable.
     }
   }
   const demoMatches = searchDemoSongs(query);

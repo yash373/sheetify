@@ -65,4 +65,10 @@ describe("catalog licensing boundary", () => {
     expect(result.songs.every((song) => song.source.provider === "imslp" || song.source.provider === "openopus")).toBe(true);
     expect(result.songs.every((song) => !song.source.downloadAllowed)).toBe(true);
   });
+
+  it("does not treat metadata-only records as authorized archive audio", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ response: { docs: [] } }), { status: 200 })));
+    const result = await searchCatalogSongs("not-a-real-track");
+    expect(result.songs).toEqual([]);
+  });
 });

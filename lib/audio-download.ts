@@ -48,6 +48,7 @@ async function readBoundedBytes(response: Response, maxBytes: number) {
 
 const defaultAuthorizedHosts: Partial<Record<TrackSource["provider"], RegExp>> = {
   jamendo: /(^|\.)storage\.jamendo\.com$/i,
+  internetarchive: /(^|\.)archive\.org$/i,
 };
 
 export function createLicensedAudioDownloader(options: AudioDownloadOptions = {}) {
