@@ -26,6 +26,7 @@ type CatalogIndexEntry = {
   artist: string;
   catalogUrl: string;
   genre: string;
+  provider?: "imslp" | "openopus";
 };
 
 const IMSLP_LICENSE_URL = "https://imslp.org/wiki/IMSLP:Copyright_Made_Easy";
@@ -71,9 +72,11 @@ export function createJamendoProvider(clientId = process.env.JAMENDO_CLIENT_ID):
   return { id: "jamendo", search: (query) => searchJamendoSongs(query, clientId) };
 }
 
-function mapImslpEntry(entry: CatalogIndexEntry): Song {
+function mapMetadataEntry(entry: CatalogIndexEntry): Song {
   const title = entry.title.trim();
   const artist = entry.artist.trim();
+  const provider = entry.provider ?? (entry.id.startsWith("openopus-") ? "openopus" : "imslp");
+  const isOpenOpus = provider === "openopus";
   return {
     id: entry.id,
     title,
@@ -81,17 +84,17 @@ function mapImslpEntry(entry: CatalogIndexEntry): Song {
     durationSeconds: 0,
     genre: entry.genre,
     source: {
-      provider: "imslp",
+      provider,
       trackId: entry.id,
       catalogUrl: entry.catalogUrl,
       durationSeconds: 0,
       downloadAllowed: false,
       metadataVerifiedAt: IMSLP_METADATA_VERIFIED_AT,
       license: {
-        name: "IMSLP catalog metadata",
-        url: IMSLP_LICENSE_URL,
+        name: isOpenOpus ? "Open Opus catalog metadata" : "IMSLP catalog metadata",
+        url: isOpenOpus ? "https://github.com/openopus-org/openopus_api" : IMSLP_LICENSE_URL,
         attributionRequired: true,
-        attributionText: `${title} by ${artist} — catalog metadata from IMSLP`,
+        attributionText: `${title} by ${artist} — catalog metadata from ${isOpenOpus ? "Open Opus" : "IMSLP"}`,
         commercialUse: "unknown",
         derivatives: "unknown",
       },
@@ -106,7 +109,7 @@ function searchImslpSongs(query: string): Song[] {
   const matches = normalized
     ? entries.filter((entry) => `${entry.title} ${entry.artist}`.toLocaleLowerCase().includes(normalized))
     : entries;
-  return matches.slice(0, 20).map(mapImslpEntry);
+  return matches.slice(0, 20).map(mapMetadataEntry);
 }
 
 export const catalogProviders = {
@@ -127,7 +130,7 @@ export async function searchCatalogSongs(query: string) {
   const demoMatches = searchDemoSongs(query);
   if (demoMatches.length > 0) return { provider: "demo" as const, songs: demoMatches };
   const metadataSongs = await catalogProviders.imslp?.search(query);
-  if (metadataSongs && metadataSongs.length > 0) return { provider: "imslp" as const, songs: metadataSongs };
+  if (metadataSongs && metadataSongs.length > 0) return { provider: "metadata" as const, songs: metadataSongs };
   return { provider: "demo" as const, songs: [] };
 }
 

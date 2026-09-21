@@ -29,7 +29,7 @@ function songHref(song: Song, difficulty: Difficulty) {
 
 function sourceSummary(song: Song) {
   if (song.source.provider === "upload") return `Your audio · processed privately on this device · ${song.processingEstimateSeconds}s estimate`;
-  if (song.source.provider === "imslp") return "IMSLP metadata · audio not attached · upload audio to transcribe";
+  if (song.source.provider === "imslp" || song.source.provider === "openopus") return `${song.source.provider === "openopus" ? "Open Opus" : "IMSLP"} metadata · audio not attached · upload audio to transcribe`;
   return song.source.downloadAllowed
     ? `${song.source.provider === "jamendo" ? "Jamendo" : "Licensed source"} · download permitted · ${song.processingEstimateSeconds}s estimate`
     : `Demo source · ${song.processingEstimateSeconds}s estimate`;
