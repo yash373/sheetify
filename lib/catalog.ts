@@ -106,7 +106,7 @@ async function searchInternetArchiveSongs(query: string): Promise<Song[]> {
   const normalized = query.trim();
   if (!normalized) return [];
   const params = new URLSearchParams({
-    q: `mediatype:audio AND format:MP3 AND (licenseurl:*publicdomain* OR licenseurl:*creativecommons.org/publicdomain*) AND (title:${normalized} OR creator:${normalized} OR subject:${normalized})`,
+    q: `mediatype:audio AND format:MP3 AND licenseurl:*publicdomain* AND (title:${normalized} OR creator:${normalized} OR subject:${normalized})`,
     fl: "identifier,title,creator,licenseurl",
     rows: "8",
     page: "1",
